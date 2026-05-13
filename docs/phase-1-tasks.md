@@ -19,9 +19,9 @@
 
 ### 2. Shared Models
 
-- [ ] Create `shared/models/__init__.py` — export all models
-- [ ] Create `shared/models/message.py` — `Message` pydantic model
-- [ ] Create `shared/models/session.py` — `Session` pydantic model
+- [x] Create `shared/models/__init__.py` — export all models
+- [x] Create `shared/models/message.py` — `Message` pydantic model
+- [x] Create `shared/models/session.py` — `Session` pydantic model
 - [ ] Create `shared/models/task.py` — `Task`, `SubTask`, `TaskPriority`, `TaskStatus` models
 
 ### 3. Configuration & Logging
