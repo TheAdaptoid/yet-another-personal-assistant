@@ -12,6 +12,10 @@ DEFAULT_CONFIG_PATH = DEFAULT_DATA_DIR / "config.json"
 DEFAULT_MODEL = "openrouter/free"
 DEFAULT_LOG_LEVEL = "INFO"
 
+DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+DEFAULT_LMSTUDIO_BASE_URL = "http://localhost:1234/v1"
+DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434/api/v1"
+
 
 class Config(BaseModel):
     """
@@ -19,12 +23,19 @@ class Config(BaseModel):
 
     Attributes:
         openrouter_api_key (str | None): OpenRouter API key for LLM calls.
+        lmstudio_base_url (str): Base URL for LM Studio API.
+        ollama_base_url (str): Base URL for Ollama API.
         default_model (str): Model identifier to use by default.
         data_dir (Path): Directory for YAPA data storage (sessions, tasks, logs).
         log_level (str): Logging level (DEBUG, INFO, WARNING, ERROR).
     """
 
     openrouter_api_key: str | None = None
+    openrouter_base_url: str = DEFAULT_OPENROUTER_BASE_URL
+    lmstudio_api_key: str | None = None
+    lmstudio_base_url: str = DEFAULT_LMSTUDIO_BASE_URL
+    ollama_api_key: str | None = None
+    ollama_base_url: str = DEFAULT_OLLAMA_BASE_URL
     default_model: str = DEFAULT_MODEL
     data_dir: Path = Field(default_factory=lambda: DEFAULT_DATA_DIR)
     log_level: str = Field(
@@ -48,6 +59,8 @@ def load_config(path: Path | None = None) -> Config:
 
     Environment variables (override config file):
         OPENROUTER_API_KEY: OpenRouter API key
+        LMSTUDIO_API_KEY: LM Studio API key
+        OLLAMA_API_KEY: Ollama API key
         YAPA_DEFAULT_MODEL: Default model identifier
         YAPA_DATA_DIR: Data directory path
         YAPA_LOG_LEVEL: Logging level
@@ -61,6 +74,8 @@ def load_config(path: Path | None = None) -> Config:
 
     env_overrides = {
         "openrouter_api_key": os.environ.get("OPENROUTER_API_KEY"),
+        "lmstudio_api_key": os.environ.get("LMSTUDIO_API_KEY"),
+        "ollama_api_key": os.environ.get("OLLAMA_API_KEY"),
         "default_model": os.environ.get("YAPA_DEFAULT_MODEL"),
         "data_dir": os.environ.get("YAPA_DATA_DIR"),
         "log_level": os.environ.get("YAPA_LOG_LEVEL"),

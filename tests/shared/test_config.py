@@ -9,6 +9,9 @@ from yapa.shared.config import (
     DEFAULT_DATA_DIR,
     DEFAULT_LOG_LEVEL,
     DEFAULT_MODEL,
+    DEFAULT_OPENROUTER_BASE_URL,
+    DEFAULT_LMSTUDIO_BASE_URL,
+    DEFAULT_OLLAMA_BASE_URL,
     Config,
     get_config,
     load_config,
@@ -197,3 +200,58 @@ class TestConfigModel:
         """Test that invalid log level raises error."""
         with pytest.raises(ValidationError):
             Config(log_level="INVALID")
+
+    def test_new_fields_default_values(self):
+        """Test that new LM Studio and Ollama fields have correct defaults."""
+        config = Config()
+        
+        assert config.openrouter_base_url == DEFAULT_OPENROUTER_BASE_URL
+        assert config.lmstudio_api_key is None
+        assert config.lmstudio_base_url == DEFAULT_LMSTUDIO_BASE_URL
+        assert config.ollama_api_key is None
+        assert config.ollama_base_url == DEFAULT_OLLAMA_BASE_URL
+
+    def test_new_fields_custom_values(self):
+        """Test that new LM Studio and Ollama fields accept custom values."""
+        config = Config(
+            openrouter_base_url="https://custom.openrouter.ai/v1",
+            lmstudio_api_key="lmstudio-key",
+            lmstudio_base_url="http://custom-lmstudio:1234/v1",
+            ollama_api_key="ollama-key",
+            ollama_base_url="http://custom-ollama:11434/api/v1",
+        )
+        
+        assert config.openrouter_base_url == "https://custom.openrouter.ai/v1"
+        assert config.lmstudio_api_key == "lmstudio-key"
+        assert config.lmstudio_base_url == "http://custom-lmstudio:1234/v1"
+        assert config.ollama_api_key == "ollama-key"
+        assert config.ollama_base_url == "http://custom-ollama:11434/api/v1"
+
+    def test_env_overrides_for_new_api_keys(self, tmp_path, monkeypatch):
+        """Test that LM Studio and Ollama API keys can be overridden via environment variables."""
+        config_path = tmp_path / "config.json"
+        config_path.write_text(json.dumps({}))  # Empty config file
+
+        monkeypatch.setenv("LMSTUDIO_API_KEY", "lmstudio-env-key")
+        monkeypatch.setenv("OLLAMA_API_KEY", "ollama-env-key")
+
+        config = load_config(path=config_path)
+
+        assert config.lmstudio_api_key == "lmstudio-env-key"
+        assert config.ollama_api_key == "ollama-env-key"
+
+    def test_empty_env_does_not_override_new_api_keys(self, tmp_path, monkeypatch):
+        """Test that empty string env vars do not override file values for new API keys."""
+        config_path = tmp_path / "config.json"
+        config_path.write_text(json.dumps({
+            "lmstudio_api_key": "lmstudio-file-key",
+            "ollama_api_key": "ollama-file-key",
+        }))
+
+        monkeypatch.setenv("LMSTUDIO_API_KEY", "")
+        monkeypatch.setenv("OLLAMA_API_KEY", "")
+
+        config = load_config(path=config_path)
+
+        assert config.lmstudio_api_key == "lmstudio-file-key"
+        assert config.ollama_api_key == "ollama-file-key"
