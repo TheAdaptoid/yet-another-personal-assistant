@@ -26,8 +26,8 @@
 
 ### 3. Configuration & Logging
 
-- [ ] Create `shared/config.py` — config management (OpenRouter API key, model, data dir)
-- [ ] Create `shared/logging.py` — logging setup to `~/.yapa/logs/`
+- [x] Create `shared/config.py` — config management (OpenRouter API key, model, data dir)
+- [x] Create `shared/logging.py` — logging setup to `~/.yapa/logs/`
 - [ ] Verify: logs appear in `~/.yapa/logs/` when core runs
 
 ### 4. LLM Client
