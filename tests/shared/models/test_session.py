@@ -2,89 +2,86 @@ import orjson
 import pytest
 from pydantic import TypeAdapter
 
-from yapa.shared.models import Session, create_session
+from yapa.shared.models import Session
 from yapa.shared.models.message import (
     AssistantMessage,
     Message,
     SystemMessage,
     UserMessage,
-    create_assistant_message,
-    create_system_message,
-    create_user_message,
 )
 
 
 class TestCreateSession:
     def test_default_title_when_no_args(self):
-        session = create_session()
+        session = Session.create()
         assert session.title == "New Session"
 
     def test_default_title_when_none(self):
-        session = create_session(None)
+        session = Session.create(title=None)
         assert session.title == "New Session"
 
     def test_default_title_when_empty_string(self):
-        session = create_session("")
+        session = Session.create(title="")
         assert session.title == "New Session"
 
     def test_default_title_when_whitespace(self):
-        session = create_session("   ")
+        session = Session.create(title="   ")
         assert session.title == "New Session"
 
     def test_custom_title(self):
-        session = create_session("My Chat")
+        session = Session.create(title="My Chat")
         assert session.title == "My Chat"
 
     def test_unique_ids(self):
-        s1 = create_session()
-        s2 = create_session()
+        s1 = Session.create()
+        s2 = Session.create()
         assert s1.id != s2.id
 
 
 class TestSessionDefaults:
     def test_default_title_constant(self):
         from yapa.shared.models.session import DEFAULT_SESSION_TITLE
-        session = Session()
+        session = Session.create()
         assert session.title == DEFAULT_SESSION_TITLE
 
     def test_default_messages_empty(self):
-        session = Session()
+        session = Session.create()
         assert session.messages == []
 
     def test_timestamps_positive(self):
-        session = Session()
+        session = Session.create()
         assert session.created_at > 0
         assert session.updated_at > 0
 
 
 class TestAddMessage:
     def test_add_message_append(self):
-        session = create_session()
-        msg = create_user_message("Hello")
+        session = Session.create()
+        msg = UserMessage(content="Hello")
         session.add_message(msg)
 
         assert len(session.messages) == 1
         assert session.messages[0].content == "Hello"
 
     def test_add_message_multiple(self):
-        session = create_session()
-        session.add_message(create_user_message("First"))
-        session.add_message(create_assistant_message("Second"))
+        session = Session.create()
+        session.add_message(UserMessage(content="First"))
+        session.add_message(AssistantMessage(content="Second"))
 
         assert len(session.messages) == 2
 
     def test_add_message_updates_timestamp(self):
-        session = create_session()
+        session = Session.create()
         original_updated = session.updated_at
-        session.add_message(create_user_message("Test"))
+        session.add_message(UserMessage(content="Test"))
 
         assert session.updated_at >= original_updated
 
     def test_add_message_preserves_type(self):
-        session = create_session()
-        session.add_message(create_user_message("user"))
-        session.add_message(create_system_message("system"))
-        session.add_message(create_assistant_message("assistant"))
+        session = Session.create()
+        session.add_message(UserMessage(content="user"))
+        session.add_message(SystemMessage(content="system"))
+        session.add_message(AssistantMessage(content="assistant"))
 
         adapter = TypeAdapter(Message)
         for i, msg in enumerate(session.messages):
@@ -98,7 +95,7 @@ class TestAddMessage:
 
 class TestSerialization:
     def test_empty_messages_roundtrip(self):
-        session = create_session("Test Title")
+        session = Session.create(title="Test Title")
         data = session.model_dump(mode="python")
         json_bytes = orjson.dumps(data)
         restored = orjson.loads(json_bytes)
@@ -109,9 +106,9 @@ class TestSerialization:
         assert parsed.messages == []
 
     def test_messages_list_roundtrip(self):
-        session = create_session("Chat")
-        session.add_message(create_user_message("User message"))
-        session.add_message(create_assistant_message("Assistant response", model="gpt-4o"))
+        session = Session.create(title="Chat")
+        session.add_message(UserMessage(content="User message"))
+        session.add_message(AssistantMessage(content="Assistant response", model="gpt-4o"))
 
         data = session.model_dump(mode="python")
         json_bytes = orjson.dumps(data)
@@ -125,10 +122,10 @@ class TestSerialization:
         assert parsed.messages[1].model == "gpt-4o"
 
     def test_mixed_message_types_roundtrip(self):
-        session = create_session()
-        session.add_message(create_system_message("System prompt", name="bot"))
-        session.add_message(create_user_message("User input"))
-        session.add_message(create_assistant_message("Response"))
+        session = Session.create()
+        session.add_message(SystemMessage(content="System prompt", name="bot"))
+        session.add_message(UserMessage(content="User input"))
+        session.add_message(AssistantMessage(content="Response"))
 
         data = session.model_dump(mode="python")
         json_bytes = orjson.dumps(data)

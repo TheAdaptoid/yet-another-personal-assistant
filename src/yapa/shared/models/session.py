@@ -28,6 +28,22 @@ class Session(BaseModel):
     created_at: int = Field(default_factory=lambda: int(time()))
     updated_at: int = Field(default_factory=lambda: int(time()))
 
+    @classmethod
+    def create(cls, title: str | None = None) -> "Session":
+        """
+        Create a new Session with a unique ID and timestamps.
+
+        Args:
+            title (str | None): Optional title for the session. If None or empty,
+                defaults to "New Session".
+
+        Returns:
+            Session: A new Session instance with the specified title and default values.
+        """
+        if not title or title.strip() == "":
+            title = DEFAULT_SESSION_TITLE
+        return cls(title=title)
+
     def add_message(self, message: Message) -> None:
         """
         Add a message to the session and update the timestamp.
@@ -37,18 +53,3 @@ class Session(BaseModel):
         """
         self.messages.append(message)
         self.updated_at = int(time())
-
-
-def create_session(title: str | None = None) -> Session:
-    """
-    Create a new Session instance.
-
-    Args:
-        title (str | None): Optional title for the session. Defaults to "New Session".
-
-    Returns:
-        Session: An instance of Session with the provided title or default.
-    """
-    if title and title.strip():
-        return Session(title=title)
-    return Session()

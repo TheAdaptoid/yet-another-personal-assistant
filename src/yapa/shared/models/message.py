@@ -1,13 +1,20 @@
 """Data models for messages in the chat application."""
 
+from abc import ABC, abstractmethod
 from time import time
 from typing import Annotated, Literal
 from uuid import uuid4
 
+from openai.types.chat import (
+    ChatCompletionAssistantMessageParam,
+    ChatCompletionMessageParam,
+    ChatCompletionSystemMessageParam,
+    ChatCompletionUserMessageParam,
+)
 from pydantic import BaseModel, Field
 
 
-class BaseMessage(BaseModel):
+class BaseMessage(ABC, BaseModel):
     """
     Base class for all message types.
 
@@ -24,6 +31,17 @@ class BaseMessage(BaseModel):
     content: str
     timestamp: int = Field(default_factory=lambda: int(time()))
 
+    @abstractmethod
+    def to_openai_format(self) -> ChatCompletionMessageParam:
+        """
+        Convert the message to a format compatible with OpenAI's API.
+
+        Returns:
+            ChatCompletionMessageParam: A dictionary with keys "role", "content", and
+            other optional fields depending on the message type.
+        """
+        pass
+
 
 class UserMessage(BaseMessage):
     """
@@ -34,6 +52,10 @@ class UserMessage(BaseMessage):
     """
 
     role: Literal["user"] = "user"
+
+    def to_openai_format(self) -> ChatCompletionUserMessageParam:
+        """Convert the UserMessage to OpenAI's ChatCompletionUserMessageParam."""
+        return ChatCompletionUserMessageParam(role=self.role, content=self.content)
 
 
 class SystemMessage(BaseMessage):
@@ -48,6 +70,14 @@ class SystemMessage(BaseMessage):
     role: Literal["system"] = "system"
     name: str | None = None
 
+    def to_openai_format(self) -> ChatCompletionSystemMessageParam:
+        """Convert the SystemMessage to OpenAI's ChatCompletionSystemMessageParam."""
+        if self.name:
+            return ChatCompletionSystemMessageParam(
+                role=self.role, content=self.content, name=self.name
+            )
+        return ChatCompletionSystemMessageParam(role=self.role, content=self.content)
+
 
 class AssistantMessage(BaseMessage):
     """
@@ -61,56 +91,15 @@ class AssistantMessage(BaseMessage):
     role: Literal["assistant"] = "assistant"
     model: str | None = None
 
+    def to_openai_format(self) -> ChatCompletionAssistantMessageParam:
+        """Convert the AssistantMessage to OpenAI's ChatCompletionAssistantMessageParam."""  # noqa: E501
+        return ChatCompletionAssistantMessageParam(
+            role=self.role,
+            content=self.content,
+        )
+
 
 Message = Annotated[
     UserMessage | SystemMessage | AssistantMessage,
     Field(discriminator="role"),
 ]
-
-
-def create_user_message(content: str) -> UserMessage:
-    """
-    Create a UserMessage instance.
-
-    Args:
-        content (str): The content of the user message.
-
-    Returns:
-        UserMessage: An instance of UserMessage with the provided content.
-    """
-
-    return UserMessage(content=content)
-
-
-def create_system_message(content: str, name: str | None = None) -> SystemMessage:
-    """
-    Create a SystemMessage instance.
-
-    Args:
-        content (str): The content of the system message.
-        name (str | None): An optional name for the system entity.
-
-    Returns:
-        SystemMessage: An instance of SystemMessage with the provided
-        content and optional name.
-    """
-
-    return SystemMessage(content=content, name=name)
-
-
-def create_assistant_message(
-    content: str, model: str | None = None
-) -> AssistantMessage:
-    """
-    Create an AssistantMessage instance.
-
-    Args:
-        content (str): The content of the assistant message.
-        model (str | None): An optional model identifier.
-
-    Returns:
-        AssistantMessage: An instance of AssistantMessage with the
-        provided content and optional model.
-    """
-
-    return AssistantMessage(content=content, model=model)

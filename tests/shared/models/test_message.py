@@ -7,24 +7,21 @@ from yapa.shared.models.message import (
     Message,
     SystemMessage,
     UserMessage,
-    create_assistant_message,
-    create_system_message,
-    create_user_message,
 )
 
 
 class TestCreateUserMessage:
     def test_returns_correct_type_and_role(self):
-        msg = create_user_message("hello")
+        msg = UserMessage(content="hello")
         assert isinstance(msg, UserMessage)
         assert msg.role == "user"
 
     def test_sets_content(self):
-        msg = create_user_message("test content")
+        msg = UserMessage(content="test content")
         assert msg.content == "test content"
 
     def test_sets_id_and_timestamp(self):
-        msg = create_user_message("hello")
+        msg = UserMessage(content="hello")
         assert len(msg.id) == 32  # uuid4().hex is 32 chars
         assert isinstance(msg.timestamp, int)
         assert msg.timestamp > 0
@@ -32,38 +29,38 @@ class TestCreateUserMessage:
 
 class TestCreateSystemMessage:
     def test_returns_correct_type_and_role(self):
-        msg = create_system_message("system prompt")
+        msg = SystemMessage(content="system prompt")
         assert isinstance(msg, SystemMessage)
         assert msg.role == "system"
 
     def test_without_name_defaults_to_none(self):
-        msg = create_system_message("be helpful")
+        msg = SystemMessage(content="be helpful")
         assert msg.name is None
 
     def test_with_name(self):
-        msg = create_system_message("you are a bot", name="assistant")
+        msg = SystemMessage(content="you are a bot", name="assistant")
         assert msg.name == "assistant"
 
 
 class TestCreateAssistantMessage:
     def test_returns_correct_type_and_role(self):
-        msg = create_assistant_message("I think therefore I am")
+        msg = AssistantMessage(content="I think therefore I am")
         assert isinstance(msg, AssistantMessage)
         assert msg.role == "assistant"
 
     def test_without_model_defaults_to_none(self):
-        msg = create_assistant_message("hello")
+        msg = AssistantMessage(content="hello")
         assert msg.model is None
 
     def test_with_model(self):
-        msg = create_assistant_message("hello", model="gpt-4o")
+        msg = AssistantMessage(content="hello", model="gpt-4o")
         assert msg.model == "gpt-4o"
 
 
 class TestUniqueIds:
     def test_consecutive_messages_have_different_ids(self):
-        msg1 = create_user_message("first")
-        msg2 = create_user_message("second")
+        msg1 = UserMessage(content="first")
+        msg2 = UserMessage(content="second")
         assert msg1.id != msg2.id
 
 
@@ -100,7 +97,7 @@ class TestDiscriminatedUnion:
 
 class TestSerialization:
     def test_roundtrip_user_message(self):
-        msg = create_user_message("Hello, world!")
+        msg = UserMessage(content="Hello, world!")
         data = msg.model_dump(mode="python")
         json_bytes = orjson.dumps(data)
         restored = orjson.loads(json_bytes)
@@ -114,7 +111,7 @@ class TestSerialization:
         assert parsed.timestamp == msg.timestamp
 
     def test_roundtrip_system_message_with_name(self):
-        msg = create_system_message("be helpful", name="bot")
+        msg = SystemMessage(content="be helpful", name="bot")
         data = msg.model_dump(mode="python")
         json_bytes = orjson.dumps(data)
         restored = orjson.loads(json_bytes)
@@ -127,7 +124,7 @@ class TestSerialization:
         assert parsed.name == "bot"
 
     def test_roundtrip_assistant_message_with_model(self):
-        msg = create_assistant_message("response", model="claude-3")
+        msg = AssistantMessage(content="response", model="claude-3")
         data = msg.model_dump(mode="python")
         json_bytes = orjson.dumps(data)
         restored = orjson.loads(json_bytes)
@@ -141,9 +138,9 @@ class TestSerialization:
 
     def test_mixed_list_roundtrip(self):
         messages = [
-            create_user_message("User message"),
-            create_system_message("System message", name="bot"),
-            create_assistant_message("Assistant response", model="gpt-4o"),
+            UserMessage(content="User message"),
+            SystemMessage(content="System message", name="bot"),
+            AssistantMessage(content="Assistant response", model="gpt-4o"),
         ]
 
         data = [m.model_dump(mode="python") for m in messages]
@@ -164,12 +161,12 @@ class TestSerialization:
 
 class TestEdgeCases:
     def test_empty_content(self):
-        msg = create_user_message("")
+        msg = UserMessage(content="")
         assert msg.content == ""
 
     def test_unicode_content(self):
         content = "你好 Hallo 😊"
-        msg = create_user_message(content)
+        msg = UserMessage(content=content)
         data = msg.model_dump(mode="python")
         json_bytes = orjson.dumps(data)
         restored = orjson.loads(json_bytes)
