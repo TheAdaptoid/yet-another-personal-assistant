@@ -1,0 +1,1 @@
+"""YAPA core package - FastAPI service for session management."""
