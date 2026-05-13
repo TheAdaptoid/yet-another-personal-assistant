@@ -1,53 +1,61 @@
 # YAPA — Developer Guide
 
-## Project Structure
+## Architecture (actual vs docs)
+
+`docs/architecture.md` describes an aspirational future state (agent loop, tasks, chat WebSocket). The **current** codebase is narrower: a FastAPI session CRUD service with JSON file storage and an in-memory variant for tests.
 
 ```
 src/yapa/
-├── core/      # yapa-core (FastAPI service)
-├── tui/       # Terminal UI (Textual)
-└── shared/    # Models, config, logging, tools
+├── core/       # FastAPI service (repositories + services + routers + app factory)
+├── tui/        # Empty — not yet implemented
+└── shared/     # Models, config, logging
 ```
 
 ## Key Commands
 
 ```bash
-# Setup (already done, for reference)
-uv sync
-
-# Run tests
-pytest tests/ -v
-
-# Lint & Type check (excludes tests/)
-ruff check src/
-ty check src/
-
-# Run core (not yet implemented)
-python -m yapa.core
-
-# Run TUI (not yet implemented)
-python -m yapa.tui
+uv run pytest tests/ -v                    # full test suite
+uv run pytest tests/core/repositories/ -v  # single package
+uv run pytest tests/core/routers/test_sessions.py::TestGetSession -v  # single class
+uv run ruff check src/                     # lint (excludes tests/)
+uv run ty check src/                       # type check (excludes tests/)
+uv run python -m yapa.core                 # start the API server
 ```
 
-## Important Conventions
+Order matters: `ruff check src/ && ty check src/ && uv run pytest tests/ -v` is the full pre‑commit gate.
 
-- **Package location**: Code lives in `src/yapa/`, not root. Imports are `from yapa.shared import ...`
-- **Config file**: `~/.yapa/config.json` — see `src/yapa/shared/config.py`
-- **Log location**: `~/.yapa/logs/{YYYY-MM-DD}/{component}.log`
-- **Logging**: Use `from yapa.shared import get_logger; logger = get_logger("core", console=True)`
-- **Models**: Located in `src/yapa/shared/models/` — use Pydantic with discriminated unions
-- **Test naming**: `tests/*/test_{module}.py`
-- **Docstrings**: Required (ruff rule D100-D107). Write them. Use line comments sparingly — code should be self-explanatory where possible.
-- **Line length**: 88 chars (ruff.toml)
-- **Python**: 3.13+
+## Testing quirks
 
-## State
+- `pytest.ini` sets `asyncio_mode = auto` — no `@pytest.mark.asyncio` needed for *tests* (you still need it when the test function is async).
+- Coverage is always on (`--cov=src`). Look for `Coverage.py warning` in output, not just test counts.
+- Repo/service mocks use `create_autospec(SessionRepository, instance=True)` then assign `AsyncMock()` to each async method. Never use `MagicMock` without a spec.
+- Router tests override `get_session_service` via `app.dependency_overrides` and use `TestClient(app, raise_server_exceptions=False)`.
+- Fixture pattern: `dummy_logger` (NullHandler), `test_config` (uses `tmp_path` for file tests), mock repo, service/router fixtures.
 
-- Phase 1 in progress: shared models, config, logging done
-- 61 tests passing
-- No runtime entry points yet (core/main.py, tui/main.py)
+## Repository error contract
+
+Repository methods never return sentinel values. They raise:
+
+| Exception | Raised by |
+|---|---|
+| `SessionNotFoundError` | `load()`, `delete()` when session is missing |
+| `SessionSaveError` | `save()` on I/O failure |
+| `SessionLoadError` | `load()`, `load_all()` on I/O or parse failure |
+| `SessionDeleteError` | `delete()` on I/O failure |
+
+The service layer catches `SessionNotFoundError` → returns `None`/`False`. All other exceptions propagate to the router → HTTP 500.
+
+## Conventions
+
+- **Package root**: `src/yapa/`. Import as `from yapa.shared import Config`, `from yapa.core.repositories import SessionRepository`.
+- **Config file**: `~/.yapa/config.json` (see `src/yapa/shared/config.py`).
+- **Logging**: `from yapa.shared import get_logger; logger = get_logger("core", console=True)` writes to `~/.yapa/logs/{date}/core.log`.
+- **Docstrings**: Required (ruff D100–D107). Use line comments sparingly.
+- **Line length**: 88 (enforced by ruff).
+- **Python**: 3.13+.
+- **No generated code, migrations, codegen, or build artifacts.** Just the lockfile (`uv.lock`).
 
 ## Don't
 
-- Don't edit `ruff.toml` to bypass lint rules — fix the code instead
-- Don't use JSON for config storage without writing a test for it first
+- Don't edit `ruff.toml` or `ty.toml` to bypass lint/type rules — fix the code instead.
+- Don't use JSON for config storage without writing a test for it first.
