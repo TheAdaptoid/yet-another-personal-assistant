@@ -41,7 +41,7 @@ class SessionService:
         Returns:
             Session: The created session.
         """
-        session = Session(title=title) if title and title.strip() else Session()
+        session = Session.create(title=title)
         await self._repository.save(session)
         self._logger.debug("Created session %s", session.id)
         return session
