@@ -14,8 +14,8 @@
   - `openai`, `httpx`
   - `pydantic`, `orjson`
   - `pytest`, `pytest-asyncio` (dev)
-- [ ] Create basic package structure (`core/`, `tui/`, `shared/`)
-- [ ] Verify imports work: `python -c "from yapa.core import main; from yapa.tui import app; from yapa.shared import models"`
+- [x] Create basic package structure (`core/`, `tui/`, `shared/`)
+- [x] Verify imports work: `python -c "from yapa.core import main; from yapa.tui import app; from yapa.shared import models"`
 
 ### 2. Shared Models
 
