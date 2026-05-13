@@ -1,3 +1,5 @@
+"""Data models for messages in the chat application."""
+
 from time import time
 from typing import Annotated, Literal
 from uuid import uuid4

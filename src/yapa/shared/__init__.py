@@ -1,3 +1,5 @@
+"""Shared utilities and models for Yapa."""
+
 from yapa.shared.config import Config, get_config, load_config, save_config
 from yapa.shared.logging import LOGGER_NAMES, get_logger
 from yapa.shared.models import (

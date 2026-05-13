@@ -1,3 +1,5 @@
+"""Shared data models for the Yapa application."""
+
 from yapa.shared.models.message import (
     AssistantMessage,
     BaseMessage,

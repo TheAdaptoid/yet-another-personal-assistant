@@ -1,3 +1,5 @@
+"""Data model for a chat session."""
+
 from time import time
 from uuid import uuid4
 

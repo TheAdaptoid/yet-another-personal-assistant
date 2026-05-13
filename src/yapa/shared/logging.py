@@ -1,4 +1,5 @@
 """YAPA logging configuration."""
+
 import logging
 from datetime import datetime, timezone
 
@@ -62,9 +63,7 @@ def get_logger(
     if console:
         console_handler = logging.StreamHandler()
         console_handler.setLevel(log_level)
-        console_formatter = logging.Formatter(
-            "%(levelname)s %(name)s: %(message)s"
-        )
+        console_formatter = logging.Formatter("%(levelname)s %(name)s: %(message)s")
         console_handler.setFormatter(console_formatter)
         logger.addHandler(console_handler)
 
