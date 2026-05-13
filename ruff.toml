@@ -1,4 +1,4 @@
-target-version = "py312"
+target-version = "py313"
 output-format = "concise"
 line-length = 88
 exclude = ["tests/"]
