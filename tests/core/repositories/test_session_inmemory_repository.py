@@ -4,6 +4,7 @@ import logging
 import pytest
 
 from yapa.core.repositories import SessionInMemoryRepository
+from yapa.core.repositories.session_repository import SessionNotFoundError
 from yapa.shared import Config
 from yapa.shared.models import Session
 
@@ -61,17 +62,27 @@ async def test_load_all_order_preserved(inmemory_repo):
 
 
 @pytest.mark.asyncio
+async def test_load_missing_raises(inmemory_repo):
+    """Load should raise SessionNotFoundError when the session does not exist."""
+    with pytest.raises(SessionNotFoundError):
+        await inmemory_repo.load("missing-id")
+
+
+@pytest.mark.asyncio
 async def test_delete_existing(inmemory_repo):
     session = Session()
     await inmemory_repo.save(session)
 
-    assert await inmemory_repo.delete(session.id) is True
-    assert await inmemory_repo.load(session.id) is None
+    await inmemory_repo.delete(session.id)
+    with pytest.raises(SessionNotFoundError):
+        await inmemory_repo.load(session.id)
 
 
 @pytest.mark.asyncio
-async def test_delete_missing_returns_false(inmemory_repo):
-    assert await inmemory_repo.delete("nonexistent") is False
+async def test_delete_missing_raises(inmemory_repo):
+    """Delete should raise SessionNotFoundError when the session is missing."""
+    with pytest.raises(SessionNotFoundError):
+        await inmemory_repo.delete("nonexistent")
 
 
 @pytest.mark.asyncio

@@ -1,9 +1,11 @@
 """In-memory implementation of the SessionRepository interface."""
 
 import logging
-from typing import Optional
 
-from yapa.core.repositories.session_repository import SessionRepository
+from yapa.core.repositories.session_repository import (
+    SessionNotFoundError,
+    SessionRepository,
+)
 from yapa.shared import Config
 from yapa.shared.models import Session
 
@@ -33,24 +35,20 @@ class SessionInMemoryRepository(SessionRepository):
         super().__init__(config, logger)
         logger.debug("Initialized in-memory repository")
 
-    async def save(self, session: Session) -> bool:
+    async def save(self, session: Session) -> None:
         """
         Save a session to the in-memory repository.
 
         Args:
             session (Session): The session object to persist.
 
-        Returns:
-            bool: True if the session was saved successfully, otherwise False.
-
         Notes:
             Overwrites any existing session with the same ID.
         """
         self._sessions[session.id] = session
         self._logger.debug("Saved session %s in memory", session.id)
-        return True
 
-    async def load(self, session_id: str) -> Optional[Session]:
+    async def load(self, session_id: str) -> Session:
         """
         Load a session from the in-memory repository.
 
@@ -58,13 +56,19 @@ class SessionInMemoryRepository(SessionRepository):
             session_id (str): The unique identifier of the session.
 
         Returns:
-            Session | None: The session object if found, otherwise None.
+            Session: The session object if found.
+
+        Raises:
+            SessionNotFoundError: If the session was not found.
         """
         session = self._sessions.get(session_id)
-        if session:
-            self._logger.debug("Loaded session %s from memory", session_id)
-        else:
-            self._logger.debug("Session %s not found in memory", session_id)
+
+        if not session:
+            err_msg = f"Session {session_id} not found in memory"
+            self._logger.debug(err_msg)
+            raise SessionNotFoundError(err_msg)
+
+        self._logger.debug("Loaded session %s from memory", session_id)
         return session
 
     async def load_all(self) -> list[Session]:
@@ -83,22 +87,20 @@ class SessionInMemoryRepository(SessionRepository):
         )
         return sessions
 
-    async def delete(self, session_id: str) -> bool:
+    async def delete(self, session_id: str) -> None:
         """
         Delete a session from the in-memory repository.
 
         Args:
             session_id (str): The unique identifier of the session.
 
-        Returns:
-            bool: True if the session was deleted successfully, otherwise False.
+        Raises:
+            SessionNotFoundError: If the session was not found.
         """
-        if session_id in self._sessions:
-            del self._sessions[session_id]
-            self._logger.debug("Deleted session %s from memory", session_id)
-            return True
-        else:
-            self._logger.debug(
-                "Session %s not found in memory for deletion", session_id
-            )
-            return False
+        if session_id not in self._sessions:
+            err_msg = f"Session {session_id} not found in memory for deletion"
+            self._logger.debug(err_msg)
+            raise SessionNotFoundError(err_msg)
+
+        del self._sessions[session_id]
+        self._logger.debug("Deleted session %s from memory", session_id)

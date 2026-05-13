@@ -5,7 +5,13 @@ import logging
 from pathlib import Path
 from typing import cast
 
-from yapa.core.repositories.session_repository import SessionRepository
+from yapa.core.repositories.session_repository import (
+    SessionDeleteError,
+    SessionLoadError,
+    SessionNotFoundError,
+    SessionRepository,
+    SessionSaveError,
+)
 from yapa.shared import Config
 from yapa.shared.models import Session
 
@@ -40,27 +46,27 @@ class SessionFileRepository(SessionRepository):
     def _path_for(self, session_id: str) -> Path:
         return self._directory / f"{session_id}.json"
 
-    async def save(self, session: Session) -> bool:
+    async def save(self, session: Session) -> None:
         """
         Save a session to a JSON file.
 
         Args:
             session (Session): The session object to persist.
 
-        Returns:
-            bool: True if the session was saved successfully, otherwise False.
+        Raises:
+            SessionSaveError: If the session could not be saved.
         """
         path = self._path_for(session.id)
         try:
             content = session.model_dump_json(indent=2)
             await asyncio.to_thread(path.write_text, content, encoding="utf-8")
             self._logger.debug("Saved session %s to %s", session.id, path)
-            return True
         except OSError:
-            self._logger.exception("Failed to save session %s", session.id)
-            return False
+            err_msg = f"Failed to save session {session.id} to {path}"
+            self._logger.exception(err_msg)
+            raise SessionSaveError(err_msg)
 
-    async def load(self, session_id: str) -> Session | None:
+    async def load(self, session_id: str) -> Session:
         """
         Load a session from a JSON file.
 
@@ -68,21 +74,27 @@ class SessionFileRepository(SessionRepository):
             session_id (str): The unique identifier of the session.
 
         Returns:
-            Session | None: The session object if found, otherwise None.
+            Session: The session object if found.
+
+        Raises:
+            SessionNotFoundError: If the session could not be found.
+            SessionLoadError: If there was an error loading the session.
         """
         path = self._path_for(session_id)
         exists = await asyncio.to_thread(path.exists)
         if not exists:
-            self._logger.debug("Session file not found: %s", path)
-            return None
+            err_msg = f"Session file not found: {path}"
+            self._logger.debug(err_msg)
+            raise SessionNotFoundError(err_msg)
         try:
             content = await asyncio.to_thread(path.read_text, encoding="utf-8")
             session = Session.model_validate_json(content)
             self._logger.debug("Loaded session %s from %s", session_id, path)
             return session
         except (OSError, ValueError):
-            self._logger.exception("Failed to load session %s", session_id)
-            return None
+            err_msg = f"Failed to load session {session_id}"
+            self._logger.exception(err_msg)
+            raise SessionLoadError(err_msg)
 
     async def load_all(self) -> list[Session]:
         """
@@ -96,8 +108,9 @@ class SessionFileRepository(SessionRepository):
             file_paths = await asyncio.to_thread(list, self._directory.glob("*.json"))
             paths: list[Path] = sorted(cast(list[Path], file_paths))
         except OSError:
-            self._logger.exception("Failed to list session files")
-            return sessions
+            err_msg = "Failed to list session files"
+            self._logger.exception(err_msg)
+            raise SessionLoadError(err_msg)
         for path in paths:
             try:
                 content = await asyncio.to_thread(path.read_text, encoding="utf-8")
@@ -107,25 +120,25 @@ class SessionFileRepository(SessionRepository):
                 self._logger.warning("Skipping invalid session file: %s", path)
         return sessions
 
-    async def delete(self, session_id: str) -> bool:
+    async def delete(self, session_id: str) -> None:
         """
         Delete a session file.
 
         Args:
             session_id (str): The unique identifier of the session.
 
-        Returns:
-            bool: True if the session was deleted successfully, otherwise False.
+        Raises:
+            SessionNotFoundError: If the session file could not be found.
         """
         path = self._path_for(session_id)
         exists = await asyncio.to_thread(path.exists)
         if not exists:
-            self._logger.debug("Session file not found for deletion: %s", path)
-            return False
+            err_msg = f"Session file not found for deletion: {path}"
+            self._logger.debug(err_msg)
+            raise SessionNotFoundError(err_msg)
         try:
             await asyncio.to_thread(path.unlink)
             self._logger.debug("Deleted session %s", session_id)
-            return True
         except OSError:
             self._logger.exception("Failed to delete session %s", session_id)
-            return False
+            raise SessionDeleteError(f"Failed to delete session {session_id}")

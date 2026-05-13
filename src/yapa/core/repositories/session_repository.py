@@ -2,10 +2,25 @@
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Optional
 
 from yapa.shared import Config
 from yapa.shared.models import Session
+
+
+class SessionSaveError(Exception):
+    """Custom exception for session save failures."""
+
+
+class SessionLoadError(Exception):
+    """Custom exception for session load failures."""
+
+
+class SessionNotFoundError(Exception):
+    """Custom exception for session not found."""
+
+
+class SessionDeleteError(Exception):
+    """Custom exception for session delete failures."""
 
 
 class SessionRepository(ABC):
@@ -28,19 +43,19 @@ class SessionRepository(ABC):
         self._logger = logger
 
     @abstractmethod
-    async def save(self, session: Session) -> bool:
+    async def save(self, session: Session) -> None:
         """
         Save a session to the repository.
 
         Args:
             session (Session): The session object to persist.
 
-        Returns:
-            bool: True if the session was saved successfully, otherwise False.
+        Raises:
+            SessionSaveError: If the session could not be saved.
         """
 
     @abstractmethod
-    async def load(self, session_id: str) -> Optional[Session]:
+    async def load(self, session_id: str) -> Session:
         """
         Load a session from the repository.
 
@@ -48,7 +63,11 @@ class SessionRepository(ABC):
             session_id (str): The unique identifier of the session.
 
         Returns:
-            Optional[Session]: The session object if found, otherwise None.
+            Session: The session object if found.
+
+        Raises:
+            SessionLoadError: If there was an error loading the session.
+            SessionNotFoundError: If the session was not found.
         """
 
     @abstractmethod
@@ -58,16 +77,20 @@ class SessionRepository(ABC):
 
         Returns:
             list[Session]: A list of all session objects in the repository.
+
+        Raises:
+            SessionLoadError: If there was an error loading the sessions.
         """
 
     @abstractmethod
-    async def delete(self, session_id: str) -> bool:
+    async def delete(self, session_id: str) -> None:
         """
         Delete a session from the repository.
 
         Args:
             session_id (str): The unique identifier of the session.
 
-        Returns:
-            bool: True if the session was deleted successfully, otherwise False.
+        Raises:
+            SessionDeleteError: If there was an error deleting the session.
+            SessionNotFoundError: If the session was not found.
         """

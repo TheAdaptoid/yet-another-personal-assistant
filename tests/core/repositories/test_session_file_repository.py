@@ -7,6 +7,12 @@ from pathlib import Path
 import pytest
 
 from yapa.core.repositories import SessionFileRepository
+from yapa.core.repositories.session_repository import (
+    SessionDeleteError,
+    SessionLoadError,
+    SessionNotFoundError,
+    SessionSaveError,
+)
 from yapa.shared import Config
 from yapa.shared.models import Session
 
@@ -47,9 +53,10 @@ async def test_save_and_load(test_config, dummy_logger):
 
 
 @pytest.mark.asyncio
-async def test_load_nonexistent_returns_none(test_config, dummy_logger):
+async def test_load_missing_raises(test_config, dummy_logger):
     repo = SessionFileRepository(test_config, dummy_logger)
-    assert await repo.load("does-not-exist") is None
+    with pytest.raises(SessionNotFoundError):
+        await repo.load("does-not-exist")
 
 
 @pytest.mark.asyncio
@@ -72,18 +79,17 @@ async def test_delete_existing(test_config, dummy_logger):
     session = Session()
     await repo.save(session)
 
-    # delete succeeds
-    assert await repo.delete(session.id) is True
-    # file is gone
+    await repo.delete(session.id)
     assert not (test_config.data_dir / "sessions" / f"{session.id}.json").exists()
-    # subsequent load returns None
-    assert await repo.load(session.id) is None
+    with pytest.raises(SessionNotFoundError):
+        await repo.load(session.id)
 
 
 @pytest.mark.asyncio
-async def test_delete_missing_returns_false(test_config, dummy_logger):
+async def test_delete_missing_raises(test_config, dummy_logger):
     repo = SessionFileRepository(test_config, dummy_logger)
-    assert await repo.delete("missing") is False
+    with pytest.raises(SessionNotFoundError):
+        await repo.delete("missing")
 
 
 @pytest.mark.asyncio
@@ -117,6 +123,48 @@ async def test_load_all_skips_invalid_json(test_config, dummy_logger):
     assert len(all_sessions) == 1
     assert all_sessions[0].id == good.id
     # logger.warning should have been called for the bad file
-    # Check that a warning was logged (we can't assert exact call without capturing)
-    # Instead, we can verify that the repository still works.
-    # For simplicity, we just ensure the test passes; the warning is internal.
+    # For brevity in this test we trust that the warning is logged;
+    # a more detailed test could capture logs with pytest's caplog fixture.
+
+
+@pytest.mark.asyncio
+async def test_save_io_error_raises(test_config, dummy_logger, monkeypatch):
+    repo = SessionFileRepository(test_config, dummy_logger)
+    session = Session()
+
+    def fake_write(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(Path, "write_text", fake_write)
+
+    with pytest.raises(SessionSaveError):
+        await repo.save(session)
+
+
+@pytest.mark.asyncio
+async def test_load_corrupt_json_raises(test_config, dummy_logger):
+    repo = SessionFileRepository(test_config, dummy_logger)
+    session = Session()
+    await repo.save(session)
+
+    # corrupt the file
+    bad_path = test_config.data_dir / "sessions" / f"{session.id}.json"
+    bad_path.write_text("{invalid json", encoding="utf-8")
+
+    with pytest.raises(SessionLoadError):
+        await repo.load(session.id)
+
+
+@pytest.mark.asyncio
+async def test_delete_io_error_raises(test_config, dummy_logger, monkeypatch):
+    repo = SessionFileRepository(test_config, dummy_logger)
+    session = Session()
+    await repo.save(session)
+
+    def fake_unlink(*args, **kwargs):
+        raise OSError("permission denied")
+
+    monkeypatch.setattr(Path, "unlink", fake_unlink)
+
+    with pytest.raises(SessionDeleteError):
+        await repo.delete(session.id)
