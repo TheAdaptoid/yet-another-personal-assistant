@@ -7,13 +7,17 @@ from yapa.shared.models.message import (
     SystemMessage,
     UserMessage,
 )
-from yapa.shared.models.session import Session
+from yapa.shared.models.session import Session, SessionData
+from yapa.shared.models.chat import ChatRequest, ChatResponse
 
 __all__ = [
     "AssistantMessage",
     "BaseMessage",
     "Message",
     "Session",
+    "SessionData",
     "SystemMessage",
     "UserMessage",
+    "ChatRequest",
+    "ChatResponse",
 ]

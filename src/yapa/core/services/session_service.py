@@ -1,10 +1,13 @@
 """Session service for managing chat sessions."""
 
+from yapa.shared.models.session import SessionData
+
 import logging
 from typing import Optional
 
 from yapa.core.repositories import SessionNotFoundError, SessionRepository
-from yapa.shared import Config, Session
+from yapa.shared import Config, Message
+from yapa.shared.models import Session, SessionData
 
 
 class SessionService:
@@ -46,17 +49,17 @@ class SessionService:
         self._logger.debug("Created session %s", session.id)
         return session
 
-    async def list_sessions(self) -> list[Session]:
+    async def list_sessions(self) -> list[SessionData]:
         """
         List all stored sessions.
 
         Returns:
-            list[Session]: List of all sessions ordered by creation time (newest first).
+            list[SessionData]: List of all sessions ordered by creation time (newest first).
         """
         sessions = await self._repository.load_all()
         sessions.sort(key=lambda s: s.created_at, reverse=True)
         self._logger.debug("Listed %d sessions", len(sessions))
-        return sessions
+        return [session.data for session in sessions]
 
     async def get_session(self, session_id: str) -> Optional[Session]:
         """
@@ -66,7 +69,7 @@ class SessionService:
             session_id (str): The unique session identifier.
 
         Returns:
-            Session | None: The session if found, otherwise None.
+            Session | None: The session data if found, otherwise None.
         """
         try:
             session = await self._repository.load(session_id)
@@ -98,8 +101,8 @@ class SessionService:
         except SessionNotFoundError:
             self._logger.debug("Cannot rename: session %s not found", session_id)
             return False
-        session.title = new_title
-        await self._repository.save(session)
+        updated_session = session.update_title(new_title)
+        await self._repository.save(updated_session)
         self._logger.debug("Renamed session %s to %s", session_id, new_title)
         return True
 

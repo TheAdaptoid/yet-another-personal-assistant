@@ -10,23 +10,79 @@ from yapa.shared.models.message import Message
 DEFAULT_SESSION_TITLE = "New Session"
 
 
-class Session(BaseModel):
+class SessionData(BaseModel):
     """
-    Represents a chat session containing a series of messages.
+    Details of a chat session, excluding messages.
 
     Attributes:
         id (str): Unique identifier for the session, generated as a UUID4 hex string.
-        title (str): Human-readable title for the session, defaults to "New Session".
-        messages (list[Message]): Ordered list of messages in this session.
+        title (str): Human-readable title for the session.
         created_at (int): Timestamp of when the session was created (Unix epoch).
         updated_at (int): Timestamp of the last update to the session (Unix epoch).
     """
 
-    id: str = Field(default_factory=lambda: uuid4().hex)
-    title: str = Field(default=DEFAULT_SESSION_TITLE)
-    messages: list[Message] = Field(default_factory=list)
-    created_at: int = Field(default_factory=lambda: int(time()))
-    updated_at: int = Field(default_factory=lambda: int(time()))
+    id: str = Field(
+        ...,
+        description=(
+            "Unique identifier for the session, generated as a UUID4 hex string."
+        ),
+    )
+    title: str = Field(..., description="Human-readable title for the session")
+    created_at: int = Field(
+        ...,
+        description="Timestamp of when the session was created (Unix epoch)",
+    )
+    updated_at: int = Field(
+        ...,
+        description="Timestamp of the last update to the session (Unix epoch)",
+    )
+
+    class Config:
+        """Make SessionData immutable."""
+
+        frozen = True
+
+
+class Session(SessionData):
+    """
+    Details of a chat session, including a series of messages.
+
+    Attributes:
+        id (str): Unique identifier for the session, generated as a UUID4 hex string.
+        title (str): Human-readable title for the session.
+        created_at (int): Timestamp of when the session was created (Unix epoch).
+        updated_at (int): Timestamp of the last update to the session (Unix epoch).
+        messages (list[Message]): Ordered list of messages in this session. Messages are
+            sorted by their timestamp in ascending order (oldest first).
+    """
+
+    messages: list[Message] = Field(
+        ...,
+        description=(
+            "Ordered list of messages in this session. Messages are sorted by their "
+            "timestamp in ascending order (oldest first)."
+        ),
+    )
+
+    class Config:
+        """Make Session immutable."""
+
+        frozen = True
+
+    @property
+    def data(self) -> SessionData:
+        """
+        Get the session details excluding messages.
+
+        Returns:
+            SessionData: A SessionData instance containing the session's metadata.
+        """
+        return SessionData(
+            id=self.id,
+            title=self.title,
+            created_at=self.created_at,
+            updated_at=self.updated_at,
+        )
 
     @classmethod
     def create(cls, title: str | None = None) -> "Session":
@@ -42,14 +98,36 @@ class Session(BaseModel):
         """
         if not title or title.strip() == "":
             title = DEFAULT_SESSION_TITLE
-        return cls(title=title)
+        return cls(
+            id=uuid4().hex,
+            title=title,
+            created_at=int(time()),
+            updated_at=int(time()),
+            messages=[],
+        )
 
-    def add_message(self, message: Message) -> None:
+    def update_title(self, new_title: str) -> "Session":
         """
-        Add a message to the session and update the timestamp.
+        Update the session's title and refresh the updated_at timestamp.
 
         Args:
-            message (Message): The message to append to the session.
+            new_title (str): The new title for the session.
+
+        Returns:
+            Session: A new Session instance with updated title and timestamp.
         """
-        self.messages.append(message)
-        self.updated_at = int(time())
+        return self.model_copy(update={"title": new_title, "updated_at": int(time())})
+
+    def add_message(self, message: Message) -> "Session":
+        """
+        Add a new message to the session and update the updated_at timestamp.
+
+        Args:
+            message (Message): The message to add to the session.
+
+        Returns:
+            Session: A new Session instance with added message and updated timestamp.
+        """
+        return self.model_copy(
+            update={"messages": self.messages + [message], "updated_at": int(time())}
+        )

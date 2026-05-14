@@ -2,7 +2,7 @@
 
 from fastapi import FastAPI
 
-from yapa.core.routers import sessions_router
+from yapa.core.routers import chat_router, sessions_router
 
 
 def create_app() -> FastAPI:
@@ -18,7 +18,8 @@ def create_app() -> FastAPI:
         version="0.1.0",
     )
 
-    app.include_router(sessions_router, prefix="/sessions")
+    app.include_router(sessions_router)
+    app.include_router(chat_router)
 
     return app
 

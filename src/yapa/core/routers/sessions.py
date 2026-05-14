@@ -10,7 +10,7 @@ from yapa.core.services.session_service import SessionService
 from yapa.shared import Config, get_config, get_logger
 from yapa.shared.models import Session
 
-router = APIRouter(tags=["sessions"])
+router = APIRouter(prefix="/sessions", tags=["sessions"])
 
 
 class SessionCreate(BaseModel):

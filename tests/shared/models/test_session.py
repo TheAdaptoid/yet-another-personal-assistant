@@ -58,22 +58,22 @@ class TestAddMessage:
     def test_add_message_append(self):
         session = Session.create()
         msg = UserMessage(content="Hello")
-        session.add_message(msg)
+        session = session.add_message(msg)
 
         assert len(session.messages) == 1
         assert session.messages[0].content == "Hello"
 
     def test_add_message_multiple(self):
         session = Session.create()
-        session.add_message(UserMessage(content="First"))
-        session.add_message(AssistantMessage(content="Second"))
+        session = session.add_message(UserMessage(content="First"))
+        session = session.add_message(AssistantMessage(content="Second"))
 
         assert len(session.messages) == 2
 
     def test_add_message_updates_timestamp(self):
         session = Session.create()
         original_updated = session.updated_at
-        session.add_message(UserMessage(content="Test"))
+        session = session.add_message(UserMessage(content="Test"))
 
         assert session.updated_at >= original_updated
 
