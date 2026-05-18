@@ -2,11 +2,24 @@
 
 A local(-ish), proactive personal productivity enhancer.
 
-## Environment Variables
+## Development Environment Setup
 
-```bash
-OPENROUTER_API_KEY=your_openrouter_api_key
-YAPA_DEFAULT_MODEL=the_default_model_you_want_to_use
-YAPA_DATA_DIR=path_to_your_data_directory # (optional, defaults to ~/.yapa)
-YAPA_LOG_LEVEL=desired_log_level (e.g., DEBUG, INFO, WARNING, ERROR, CRITICAL)
-```
+1. Clone the repository
+2. Create a virtual environment and activate it:
+    ```bash
+    uv venv
+    uv sync
+    ```
+3. install development tools:
+    ```bash
+    uv tool install rust-just
+    uv sync --dev
+    ```
+4. Configure environment variables as needed:
+    ```bash
+    OPENROUTER_API_KEY=your_openrouter_api_key
+    YAPA_DEFAULT_MODEL=the_default_model_you_want_to_use
+    YAPA_DATA_DIR=path_to_your_data_directory # (optional, defaults to ~/.yapa)
+    YAPA_LOG_LEVEL=desired_log_level (e.g., DEBUG, INFO, WARNING, ERROR, CRITICAL)
+    ```
+5. Get cracking!!
