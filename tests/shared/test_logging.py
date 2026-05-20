@@ -1,8 +1,6 @@
 """Tests for logging module."""
 import logging
-import os
 from datetime import datetime, timezone
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest

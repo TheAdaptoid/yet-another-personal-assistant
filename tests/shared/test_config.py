@@ -1,5 +1,4 @@
 import json
-import os
 from pathlib import Path
 
 import pytest
@@ -7,11 +6,11 @@ from pydantic import ValidationError
 
 from yapa.shared.config import (
     DEFAULT_DATA_DIR,
+    DEFAULT_LMSTUDIO_BASE_URL,
     DEFAULT_LOG_LEVEL,
     DEFAULT_MODEL,
-    DEFAULT_OPENROUTER_BASE_URL,
-    DEFAULT_LMSTUDIO_BASE_URL,
     DEFAULT_OLLAMA_BASE_URL,
+    DEFAULT_OPENROUTER_BASE_URL,
     Config,
     get_config,
     load_config,
