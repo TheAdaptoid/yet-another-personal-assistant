@@ -1,7 +1,15 @@
 target-version = "py313"
 output-format = "concise"
 line-length = 88
-exclude = ["tests/"]
 
 lint.select = ["F", "E", "I", "C90", "D"]
 lint.ignore = ["D212", "D413", "D202", "D203"]
+
+lint.per-file-ignores."tests/**" = [
+  "D100",  # Missing docstring in public module
+  "D101",  # Missing docstring in public class
+  "D102",  # Missing docstring in public method
+  "D103",  # Missing docstring in public function
+  "D104",  # Missing docstring in public package
+  "D107",  # Missing docstring in __init__
+]
