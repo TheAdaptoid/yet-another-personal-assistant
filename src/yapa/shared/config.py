@@ -74,8 +74,11 @@ def load_config(path: Path | None = None) -> Config:
 
     env_overrides = {
         "openrouter_api_key": os.environ.get("OPENROUTER_API_KEY"),
+        "openrouter_base_url": os.environ.get("OPENROUTER_BASE_URL"),
         "lmstudio_api_key": os.environ.get("LMSTUDIO_API_KEY"),
+        "lmstudio_base_url": os.environ.get("LMSTUDIO_BASE_URL"),
         "ollama_api_key": os.environ.get("OLLAMA_API_KEY"),
+        "ollama_base_url": os.environ.get("OLLAMA_BASE_URL"),
         "default_model": os.environ.get("YAPA_DEFAULT_MODEL"),
         "data_dir": os.environ.get("YAPA_DATA_DIR"),
         "log_level": os.environ.get("YAPA_LOG_LEVEL"),
