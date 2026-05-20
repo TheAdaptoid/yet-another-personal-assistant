@@ -22,18 +22,18 @@ class SessionData(BaseModel):
     """
 
     id: str = Field(
-        ...,
+        default_factory=lambda: uuid4().hex,
         description=(
             "Unique identifier for the session, generated as a UUID4 hex string."
         ),
     )
     title: str = Field(..., description="Human-readable title for the session")
     created_at: int = Field(
-        ...,
+        default_factory=lambda: int(time()),
         description="Timestamp of when the session was created (Unix epoch)",
     )
     updated_at: int = Field(
-        ...,
+        default_factory=lambda: int(time()),
         description="Timestamp of the last update to the session (Unix epoch)",
     )
 
@@ -57,7 +57,7 @@ class Session(SessionData):
     """
 
     messages: list[Message] = Field(
-        ...,
+        default_factory=list,
         description=(
             "Ordered list of messages in this session. Messages are sorted by their "
             "timestamp in ascending order (oldest first)."
@@ -131,3 +131,31 @@ class Session(SessionData):
         return self.model_copy(
             update={"messages": self.messages + [message], "updated_at": int(time())}
         )
+
+
+class SessionCreateRequest(BaseModel):
+    """
+    Data model for creating a new session.
+
+    Attributes:
+        title (str | None): Optional title for the session.
+    """
+
+    title: str | None = Field(
+        None,
+        description="Optional title for the session.",
+    )
+
+
+class SessionRenameRequest(BaseModel):
+    """
+    Data model for renaming an existing session.
+
+    Attributes:
+        title (str): New title for the session.
+    """
+
+    title: str = Field(
+        ...,
+        description="New title for the session.",
+    )

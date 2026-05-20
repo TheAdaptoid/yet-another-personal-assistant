@@ -1,12 +1,9 @@
 """Session service for managing chat sessions."""
 
-from yapa.shared.models.session import SessionData
-
 import logging
-from typing import Optional
 
 from yapa.core.repositories import SessionNotFoundError, SessionRepository
-from yapa.shared import Config, Message
+from yapa.shared import Config
 from yapa.shared.models import Session, SessionData
 
 
@@ -54,14 +51,15 @@ class SessionService:
         List all stored sessions.
 
         Returns:
-            list[SessionData]: List of all sessions ordered by creation time (newest first).
+            list[SessionData]: List of all sessions ordered by creation time
+                (newest first).
         """
         sessions = await self._repository.load_all()
         sessions.sort(key=lambda s: s.created_at, reverse=True)
         self._logger.debug("Listed %d sessions", len(sessions))
         return [session.data for session in sessions]
 
-    async def get_session(self, session_id: str) -> Optional[Session]:
+    async def get_session(self, session_id: str) -> Session | None:
         """
         Retrieve a session by its ID.
 
@@ -79,7 +77,9 @@ class SessionService:
         self._logger.debug("Retrieved session %s", session_id)
         return session
 
-    async def rename_session(self, session_id: str, new_title: str) -> bool:
+    async def rename_session(
+        self, session_id: str, new_title: str
+    ) -> SessionData | None:
         """
         Rename an existing session.
 
@@ -88,23 +88,23 @@ class SessionService:
             new_title (str): The new title for the session.
 
         Returns:
-            bool: True if the session was renamed, False if not found.
+            SessionData | None: The updated session data if renamed, None if not found.
         """
         if not new_title.strip():
             self._logger.debug(
                 "Cannot rename session %s: new title is empty", session_id
             )
-            return False
+            return None
 
         try:
             session = await self._repository.load(session_id)
         except SessionNotFoundError:
             self._logger.debug("Cannot rename: session %s not found", session_id)
-            return False
+            return None
         updated_session = session.update_title(new_title)
         await self._repository.save(updated_session)
         self._logger.debug("Renamed session %s to %s", session_id, new_title)
-        return True
+        return updated_session.data
 
     async def delete_session(self, session_id: str) -> bool:
         """

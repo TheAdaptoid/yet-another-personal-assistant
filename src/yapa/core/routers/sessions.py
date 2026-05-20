@@ -4,25 +4,17 @@ import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
 
-from yapa.core.services.session_service import SessionService
+from yapa.core.services import SessionService
 from yapa.shared import Config, get_config, get_logger
-from yapa.shared.models import Session
+from yapa.shared.models import (
+    Session,
+    SessionCreateRequest,
+    SessionData,
+    SessionRenameRequest,
+)
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
-
-
-class SessionCreate(BaseModel):
-    """Request body for creating a session."""
-
-    title: str | None = None
-
-
-class SessionRename(BaseModel):
-    """Request body for renaming a session."""
-
-    title: str
 
 
 def get_session_service(
@@ -44,14 +36,14 @@ def get_session_service(
 
 @router.post(
     "/",
-    response_model=Session,
+    response_model=SessionData,
     status_code=status.HTTP_201_CREATED,
     summary="Create a new session",
 )
 async def create_session(
-    body: SessionCreate | None = None,
+    body: SessionCreateRequest | None = None,
     service: SessionService = Depends(get_session_service),
-) -> Session:
+) -> SessionData:
     """
     Create a new session with an optional title.
 
@@ -63,12 +55,12 @@ async def create_session(
 
 @router.get(
     "/",
-    response_model=list[Session],
+    response_model=list[SessionData],
     summary="List all sessions",
 )
 async def list_sessions(
     service: SessionService = Depends(get_session_service),
-) -> list[Session]:
+) -> list[SessionData]:
     """Retrieve all sessions ordered by creation time (newest first)."""
     return await service.list_sessions()
 
@@ -98,26 +90,20 @@ async def get_session(
 
 @router.patch(
     "/{session_id}",
-    response_model=Session,
+    response_model=SessionData,
     summary="Rename a session",
 )
 async def rename_session(
     session_id: str,
-    body: SessionRename,
+    body: SessionRenameRequest,
     service: SessionService = Depends(get_session_service),
-) -> Session:
+) -> SessionData:
     """
     Rename an existing session.
 
     Raises 404 if the session doesn't exist.
     """
-    success = await service.rename_session(session_id, body.title)
-    if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session not found",
-        )
-    session = await service.get_session(session_id)
+    session = await service.rename_session(session_id, body.title)
     if session is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

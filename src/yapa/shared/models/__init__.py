@@ -9,7 +9,7 @@ from .message import (
     SystemMessage,
     UserMessage,
 )
-from .session import Session, SessionData
+from .session import Session, SessionCreateRequest, SessionData, SessionRenameRequest
 
 __all__ = [
     "AssistantMessage",
@@ -17,7 +17,9 @@ __all__ = [
     "InferenceParams",
     "Message",
     "Session",
+    "SessionCreateRequest",
     "SessionData",
+    "SessionRenameRequest",
     "SystemMessage",
     "UserMessage",
     "ChatRequest",
