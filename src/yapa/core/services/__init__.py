@@ -1,5 +1,6 @@
 """Core services of the Yapa application."""
 
-from yapa.core.services.session_service import SessionService
+from .inference_service import InferenceService
+from .session_service import SessionService
 
-__all__ = ["SessionService"]
+__all__ = ["SessionService", "InferenceService"]

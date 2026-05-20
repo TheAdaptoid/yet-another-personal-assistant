@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from openai.types.chat import (
     ChatCompletionAssistantMessageParam,
+    ChatCompletionMessage,
     ChatCompletionMessageParam,
     ChatCompletionSystemMessageParam,
     ChatCompletionUserMessageParam,
@@ -96,6 +97,16 @@ class AssistantMessage(BaseMessage):
         return ChatCompletionAssistantMessageParam(
             role=self.role,
             content=self.content,
+        )
+
+    @classmethod
+    def from_openai_format(
+        cls, message: ChatCompletionMessage, model_id: str
+    ) -> "AssistantMessage":
+        """Create an AssistantMessage instance from OpenAI's ChatCompletionMessage."""
+        return cls(
+            content=message.content or "",
+            model=model_id,
         )
 
 

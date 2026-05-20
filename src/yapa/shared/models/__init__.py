@@ -1,18 +1,20 @@
 """Shared data models for the Yapa application."""
 
-from yapa.shared.models.message import (
+from .chat import ChatRequest, ChatResponse
+from .inference import InferenceParams, ModelData
+from .message import (
     AssistantMessage,
     BaseMessage,
     Message,
     SystemMessage,
     UserMessage,
 )
-from yapa.shared.models.session import Session, SessionData
-from yapa.shared.models.chat import ChatRequest, ChatResponse
+from .session import Session, SessionData
 
 __all__ = [
     "AssistantMessage",
     "BaseMessage",
+    "InferenceParams",
     "Message",
     "Session",
     "SessionData",
@@ -20,4 +22,5 @@ __all__ = [
     "UserMessage",
     "ChatRequest",
     "ChatResponse",
+    "ModelData",
 ]
