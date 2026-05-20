@@ -4,7 +4,7 @@ import logging
 
 from yapa.core.repositories import SessionNotFoundError, SessionRepository
 from yapa.shared import Config
-from yapa.shared.models import Session, SessionData
+from yapa.shared.models import Message, Session, SessionData
 
 
 class SessionService:
@@ -123,6 +123,31 @@ class SessionService:
             return False
         self._logger.debug("Deleted session %s", session_id)
         return True
+
+    async def append_message(
+        self, session_id: str, message: Message
+    ) -> Session | None:
+        """
+        Load a session, append a message, and persist the updated session.
+
+        Args:
+            session_id (str): The unique session identifier.
+            message (Message): The message to append to the session.
+
+        Returns:
+            Session | None: The updated session if found, otherwise None.
+        """
+        try:
+            session = await self._repository.load(session_id)
+        except SessionNotFoundError:
+            self._logger.debug(
+                "Cannot append message: session %s not found", session_id
+            )
+            return None
+        updated = session.add_message(message)
+        await self._repository.save(updated)
+        self._logger.debug("Appended message to session %s", session_id)
+        return updated
 
     @classmethod
     def with_file_repository(
