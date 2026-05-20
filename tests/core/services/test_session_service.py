@@ -14,8 +14,7 @@ from yapa.core.repositories import (
 )
 from yapa.core.services.session_service import SessionService
 from yapa.shared import Config
-from yapa.shared.models import Session
-
+from yapa.shared.models import Session, SessionData
 
 # --- Fixtures ------------------------------------------------------------------
 
@@ -114,12 +113,9 @@ class TestListSessions:
     @pytest.mark.asyncio
     async def test_returns_sessions_newest_first(self, service, mock_repo):
         """Sessions are sorted by created_at descending."""
-        s1 = Session()
-        s1.created_at = 100
-        s2 = Session()
-        s2.created_at = 200
-        s3 = Session()
-        s3.created_at = 150
+        s1 = Session(title="a", created_at=100)
+        s2 = Session(title="b", created_at=200)
+        s3 = Session(title="c", created_at=150)
         mock_repo.load_all.return_value = [s1, s2, s3]
 
         result = await service.list_sessions()
@@ -183,40 +179,42 @@ class TestRenameSession:
 
     @pytest.mark.asyncio
     async def test_success(self, service, mock_repo, sample_session):
-        """Happy path: loads session, sets title, saves, returns True."""
+        """Happy path: loads session, sets title, saves, returns SessionData."""
         mock_repo.load.return_value = sample_session
 
         result = await service.rename_session(sample_session.id, "new title")
 
-        assert result is True
-        assert sample_session.title == "new title"
-        mock_repo.save.assert_awaited_once_with(sample_session)
+        assert result is not None
+        assert isinstance(result, SessionData)
+        assert result.title == "new title"
+        assert result.id == sample_session.id
+        mock_repo.save.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_not_found_returns_false(self, service, mock_repo):
-        """SessionNotFoundError is caught and translated to False."""
+    async def test_not_found_returns_none(self, service, mock_repo):
+        """SessionNotFoundError is caught and translated to None."""
         mock_repo.load.side_effect = SessionNotFoundError
 
         result = await service.rename_session("missing", "new title")
 
-        assert result is False
+        assert result is None
         mock_repo.save.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_empty_title_returns_false(self, service, mock_repo):
+    async def test_empty_title_returns_none(self, service, mock_repo):
         """Empty title short-circuits before any repo call."""
         result = await service.rename_session("any", "")
 
-        assert result is False
+        assert result is None
         mock_repo.load.assert_not_called()
         mock_repo.save.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_whitespace_title_returns_false(self, service, mock_repo):
+    async def test_whitespace_title_returns_none(self, service, mock_repo):
         """Whitespace-only title short-circuits before any repo call."""
         result = await service.rename_session("any", "   ")
 
-        assert result is False
+        assert result is None
         mock_repo.load.assert_not_called()
 
     @pytest.mark.asyncio

@@ -1,6 +1,7 @@
 """Tests for the in-memory session repository."""
 
 import logging
+
 import pytest
 
 from yapa.core.repositories import SessionInMemoryRepository
@@ -38,7 +39,7 @@ async def test_initial_state_empty(inmemory_repo):
 
 @pytest.mark.asyncio
 async def test_save_and_load(inmemory_repo):
-    session = Session()
+    session = Session(title="test")
     await inmemory_repo.save(session)
 
     loaded = await inmemory_repo.load(session.id)
@@ -49,9 +50,9 @@ async def test_save_and_load(inmemory_repo):
 
 @pytest.mark.asyncio
 async def test_load_all_order_preserved(inmemory_repo):
-    s1 = Session()
-    s2 = Session()
-    s3 = Session()
+    s1 = Session(title="a")
+    s2 = Session(title="b")
+    s3 = Session(title="c")
     await inmemory_repo.save(s1)
     await inmemory_repo.save(s2)
     await inmemory_repo.save(s3)
@@ -70,7 +71,7 @@ async def test_load_missing_raises(inmemory_repo):
 
 @pytest.mark.asyncio
 async def test_delete_existing(inmemory_repo):
-    session = Session()
+    session = Session(title="test")
     await inmemory_repo.save(session)
 
     await inmemory_repo.delete(session.id)
@@ -90,8 +91,8 @@ async def test_save_overwrites(inmemory_repo):
     session = Session(title="first")
     await inmemory_repo.save(session)
 
-    session.title = "second"
-    await inmemory_repo.save(session)
+    updated = session.model_copy(update={"title": "second"})
+    await inmemory_repo.save(updated)
 
     loaded = await inmemory_repo.load(session.id)
     assert loaded.title == "second"

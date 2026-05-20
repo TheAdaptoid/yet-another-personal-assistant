@@ -1,5 +1,4 @@
 import orjson
-import pytest
 from pydantic import TypeAdapter
 
 from yapa.shared.models import Session
@@ -79,9 +78,9 @@ class TestAddMessage:
 
     def test_add_message_preserves_type(self):
         session = Session.create()
-        session.add_message(UserMessage(content="user"))
-        session.add_message(SystemMessage(content="system"))
-        session.add_message(AssistantMessage(content="assistant"))
+        session = session.add_message(UserMessage(content="user"))
+        session = session.add_message(SystemMessage(content="system"))
+        session = session.add_message(AssistantMessage(content="assistant"))
 
         adapter = TypeAdapter(Message)
         for i, msg in enumerate(session.messages):
@@ -107,8 +106,8 @@ class TestSerialization:
 
     def test_messages_list_roundtrip(self):
         session = Session.create(title="Chat")
-        session.add_message(UserMessage(content="User message"))
-        session.add_message(AssistantMessage(content="Assistant response", model="gpt-4o"))
+        session = session.add_message(UserMessage(content="User message"))
+        session = session.add_message(AssistantMessage(content="Assistant response", model="gpt-4o"))
 
         data = session.model_dump(mode="python")
         json_bytes = orjson.dumps(data)
@@ -123,9 +122,9 @@ class TestSerialization:
 
     def test_mixed_message_types_roundtrip(self):
         session = Session.create()
-        session.add_message(SystemMessage(content="System prompt", name="bot"))
-        session.add_message(UserMessage(content="User input"))
-        session.add_message(AssistantMessage(content="Response"))
+        session = session.add_message(SystemMessage(content="System prompt", name="bot"))
+        session = session.add_message(UserMessage(content="User input"))
+        session = session.add_message(AssistantMessage(content="Response"))
 
         data = session.model_dump(mode="python")
         json_bytes = orjson.dumps(data)

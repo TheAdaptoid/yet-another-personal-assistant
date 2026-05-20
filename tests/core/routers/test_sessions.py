@@ -13,8 +13,7 @@ from yapa.core.repositories import (
 )
 from yapa.core.routers.sessions import get_session_service, router
 from yapa.core.services.session_service import SessionService
-from yapa.shared.models import Session
-
+from yapa.shared.models import Session, SessionData
 
 # --- Fixtures ------------------------------------------------------------------
 
@@ -35,7 +34,7 @@ def mock_service():
 def app(mock_service):
     """Minimal FastAPI app with the sessions router and a mocked dependency."""
     app = FastAPI()
-    app.include_router(router, prefix="/sessions")
+    app.include_router(router)
     app.dependency_overrides[get_session_service] = lambda: mock_service
     yield app
     app.dependency_overrides.clear()
@@ -74,7 +73,7 @@ class TestCreateSession:
 
     def test_201_without_body(self, client, mock_service):
         """Omitting the body still creates a session (default title)."""
-        session = Session()
+        session = Session(title="New Session")
         mock_service.create_session.return_value = session
 
         response = client.post("/sessions/")
@@ -172,9 +171,13 @@ class TestRenameSession:
     """PATCH /sessions/{session_id} — SessionService.rename_session."""
 
     def test_200_success(self, client, mock_service, sample_session):
-        """Successful rename returns the session fetched by get_session."""
-        mock_service.rename_session.return_value = True
-        mock_service.get_session.return_value = sample_session
+        """Successful rename returns the session data."""
+        mock_service.rename_session.return_value = SessionData(
+            id=sample_session.id,
+            title="renamed",
+            created_at=sample_session.created_at,
+            updated_at=sample_session.updated_at,
+        )
 
         response = client.patch(
             f"/sessions/{sample_session.id}",
@@ -184,10 +187,11 @@ class TestRenameSession:
         assert response.status_code == 200
         data = response.json()
         assert data["id"] == sample_session.id
+        assert data["title"] == "renamed"
 
     def test_404_not_found(self, client, mock_service):
-        """rename_session returning False yields a 404."""
-        mock_service.rename_session.return_value = False
+        """rename_session returning None yields a 404."""
+        mock_service.rename_session.return_value = None
 
         response = client.patch("/sessions/missing", json={"title": "new name"})
 
