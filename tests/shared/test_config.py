@@ -36,7 +36,7 @@ class TestLoadConfig:
         config = load_config(path=config_path)
 
         assert config.default_model == DEFAULT_MODEL
-        assert config.openrouter_api_key is None
+        assert config.openrouter_api_key == "NOT_SET"
         assert config.data_dir == DEFAULT_DATA_DIR
         assert config.log_level == DEFAULT_LOG_LEVEL
 
@@ -171,7 +171,7 @@ class TestConfigModel:
         config = Config()
 
         assert config.default_model == DEFAULT_MODEL
-        assert config.openrouter_api_key is None
+        assert config.openrouter_api_key == "NOT_SET"
         assert config.data_dir == DEFAULT_DATA_DIR
         assert config.log_level == DEFAULT_LOG_LEVEL
 
@@ -203,11 +203,11 @@ class TestConfigModel:
     def test_new_fields_default_values(self):
         """Test that new LM Studio and Ollama fields have correct defaults."""
         config = Config()
-        
+
         assert config.openrouter_base_url == DEFAULT_OPENROUTER_BASE_URL
-        assert config.lmstudio_api_key is None
+        assert config.lmstudio_api_key == "NOT_SET"
         assert config.lmstudio_base_url == DEFAULT_LMSTUDIO_BASE_URL
-        assert config.ollama_api_key is None
+        assert config.ollama_api_key == "NOT_SET"
         assert config.ollama_base_url == DEFAULT_OLLAMA_BASE_URL
 
     def test_new_fields_custom_values(self):
@@ -219,7 +219,7 @@ class TestConfigModel:
             ollama_api_key="ollama-key",
             ollama_base_url="http://custom-ollama:11434/api/v1",
         )
-        
+
         assert config.openrouter_base_url == "https://custom.openrouter.ai/v1"
         assert config.lmstudio_api_key == "lmstudio-key"
         assert config.lmstudio_base_url == "http://custom-lmstudio:1234/v1"
@@ -242,10 +242,14 @@ class TestConfigModel:
     def test_empty_env_does_not_override_new_api_keys(self, tmp_path, monkeypatch):
         """Test that empty string env vars do not override file values for new API keys."""
         config_path = tmp_path / "config.json"
-        config_path.write_text(json.dumps({
-            "lmstudio_api_key": "lmstudio-file-key",
-            "ollama_api_key": "ollama-file-key",
-        }))
+        config_path.write_text(
+            json.dumps(
+                {
+                    "lmstudio_api_key": "lmstudio-file-key",
+                    "ollama_api_key": "ollama-file-key",
+                }
+            )
+        )
 
         monkeypatch.setenv("LMSTUDIO_API_KEY", "")
         monkeypatch.setenv("OLLAMA_API_KEY", "")

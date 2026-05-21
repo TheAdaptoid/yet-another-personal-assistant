@@ -54,8 +54,8 @@ class TestOpenRouterIP:
     ):
         """get_models returns ModelData objects from the API response."""
         mock_client = mock_openrouter_env
-        model_a = MagicMock(id="openai/gpt-4o")
-        model_b = MagicMock(id="anthropic/claude-3")
+        model_a = MagicMock(id="deepseek/deepseek-chat")
+        model_b = MagicMock(id="qwen/qwen3-4b-2507")
         response = MagicMock()
         response.data = [model_a, model_b]
         mock_client.models.list = AsyncMock(return_value=response)
@@ -65,9 +65,9 @@ class TestOpenRouterIP:
 
         assert len(models) == 2
         assert all(isinstance(m, ModelData) for m in models)
-        assert models[0].id == "openai/gpt-4o"
+        assert models[0].id == "deepseek/deepseek-chat"
         assert models[0].provider_id == "openrouter"
-        assert models[1].id == "anthropic/claude-3"
+        assert models[1].id == "qwen/qwen3-4b-2507"
         assert models[1].provider_id == "openrouter"
 
     @pytest.mark.asyncio

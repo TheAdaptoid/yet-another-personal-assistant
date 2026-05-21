@@ -43,7 +43,10 @@ class OpenRouterIP(InferenceProvider):
                     provider_name=self.name,
                 )
                 for model in response.data
-                if "free" in model.id.lower()  # TODO: Add more sophisticated filtering
+                if any(
+                    kw in model.id.lower()
+                    for kw in ["kimi", "gpt-5", "qwen3", "deepseek"]
+                )  # TODO: Add more sophisticated filtering logic
             ]
         except Exception as e:
             self._logger.error(f"Error retrieving models from OpenRouter: {e}")
