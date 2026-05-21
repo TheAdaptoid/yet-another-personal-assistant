@@ -5,7 +5,10 @@ import os
 from pathlib import Path
 from typing import Any
 
+from dotenv import load_dotenv
 from pydantic import BaseModel, Field
+
+load_dotenv()
 
 DEFAULT_DATA_DIR = Path.home() / ".yapa"
 DEFAULT_CONFIG_PATH = DEFAULT_DATA_DIR / "config.json"
@@ -15,6 +18,8 @@ DEFAULT_LOG_LEVEL = "INFO"
 DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_LMSTUDIO_BASE_URL = "http://localhost:1234/v1"
 DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434/api/v1"
+
+UNSET = "NOT_SET"
 
 
 class Config(BaseModel):
@@ -30,11 +35,11 @@ class Config(BaseModel):
         log_level (str): Logging level (DEBUG, INFO, WARNING, ERROR).
     """
 
-    openrouter_api_key: str | None = None
+    openrouter_api_key: str = UNSET
     openrouter_base_url: str = DEFAULT_OPENROUTER_BASE_URL
-    lmstudio_api_key: str | None = None
+    lmstudio_api_key: str = UNSET
     lmstudio_base_url: str = DEFAULT_LMSTUDIO_BASE_URL
-    ollama_api_key: str | None = None
+    ollama_api_key: str = UNSET
     ollama_base_url: str = DEFAULT_OLLAMA_BASE_URL
     default_model: str = DEFAULT_MODEL
     data_dir: Path = Field(default_factory=lambda: DEFAULT_DATA_DIR)

@@ -43,6 +43,7 @@ class OpenRouterIP(InferenceProvider):
                     provider_name=self.name,
                 )
                 for model in response.data
+                if "free" in model.id.lower()  # TODO: Add more sophisticated filtering
             ]
         except Exception as e:
             self._logger.error(f"Error retrieving models from OpenRouter: {e}")
