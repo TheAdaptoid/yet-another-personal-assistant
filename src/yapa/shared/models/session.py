@@ -3,7 +3,7 @@
 from time import time
 from uuid import uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from yapa.shared.models.message import Message
 
@@ -37,10 +37,7 @@ class SessionData(BaseModel):
         description="Timestamp of the last update to the session (Unix epoch)",
     )
 
-    class Config:
-        """Make SessionData immutable."""
-
-        frozen = True
+    model_config = ConfigDict(frozen=True)  # Make SessionData immutable
 
 
 class Session(SessionData):
@@ -64,10 +61,7 @@ class Session(SessionData):
         ),
     )
 
-    class Config:
-        """Make Session immutable."""
-
-        frozen = True
+    model_config = ConfigDict(frozen=True)  # Make Session immutable
 
     @property
     def data(self) -> SessionData:

@@ -19,9 +19,22 @@ from yapa.shared.config import (
 
 
 @pytest.fixture(autouse=True)
-def reset_global_config():
-    """Reset the global config cache before and after each test."""
+def reset_global_config(monkeypatch):
+    """Reset the global config cache and clear config env vars before/after each test."""
     import yapa.shared.config as config_module
+
+    for env_var in [
+        "OPENROUTER_API_KEY",
+        "OPENROUTER_BASE_URL",
+        "LMSTUDIO_API_KEY",
+        "LMSTUDIO_BASE_URL",
+        "OLLAMA_API_KEY",
+        "OLLAMA_BASE_URL",
+        "YAPA_DEFAULT_MODEL",
+        "YAPA_DATA_DIR",
+        "YAPA_LOG_LEVEL",
+    ]:
+        monkeypatch.delenv(env_var, raising=False)
 
     config_module._config = None
     yield
