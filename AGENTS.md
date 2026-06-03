@@ -1,61 +1,84 @@
 # YAPA — Developer Guide
 
-## Architecture (actual vs docs)
+## Architecture (current state)
 
-`docs/architecture.md` describes an aspirational future state (agent loop, tasks, chat WebSocket). The **current** codebase is narrower: a FastAPI session CRUD service with JSON file storage and an in-memory variant for tests.
+The current codebase is a Typer CLI app with provider abstractions for model
+discovery and streaming inference.
 
 ```
 src/yapa/
-├── core/       # FastAPI service (repositories + services + routers + app factory)
-├── tui/        # Empty — not yet implemented
-└── shared/     # Models, config, logging
+├── __main__.py      # Entry point (`python -m yapa`)
+├── config.py        # Config loading/caching + JSON persistence
+├── logging.py       # File + optional console logging
+├── cli/
+│   ├── __init__.py
+│   └── cli.py       # Typer commands: `models`, `invoke`
+├── models/
+│   ├── inference.py # InferenceParams, ModelData, StreamDelta
+│   └── message.py   # User/System/Assistant message models
+└── providers/
+    ├── base.py      # InferenceProvider base class
+    ├── exceptions.py
+    ├── lmstudio.py
+    ├── manager.py   # ProviderManager
+    └── openrouter.py
 ```
+
+There is currently no `src/yapa/core/`, `src/yapa/shared/`, or `src/yapa/tui/`.
 
 ## Key Commands
 
 ```bash
-uv run pytest tests/ -v                    # full test suite
-uv run pytest tests/core/repositories/ -v  # single package
-uv run pytest tests/core/routers/test_sessions.py::TestGetSession -v  # single class
-uv run ruff check src/                     # lint (excludes tests/)
-uv run ty check src/                       # type check (excludes tests/)
-uv run python -m yapa.core                 # start the API server
+uv run python -m yapa                              # run CLI
+uv run python -m yapa models                       # list models
+uv run python -m yapa invoke                       # interactive chat loop
+uv run pytest tests/ -v                            # full test suite
+uv run pytest tests/providers/ -v                  # provider tests
+uv run pytest tests/providers/test_manager.py -v   # single test file
+uv run ruff check src/ tests/                      # lint
+uv run ty check src/                               # type check
 ```
 
-Order matters: `ruff check src/ && ty check src/ && uv run pytest tests/ -v` is the full pre‑commit gate.
+Recommended local gate:
+`uv run ruff check src/ tests/ && uv run ty check src/ && uv run pytest tests/ -v`
 
-## Testing quirks
+## Testing Notes
 
-- `pytest.ini` sets `asyncio_mode = auto` — no `@pytest.mark.asyncio` needed for *tests* (you still need it when the test function is async).
-- Coverage is always on (`--cov=src`). Look for `Coverage.py warning` in output, not just test counts.
-- Repo/service mocks use `create_autospec(SessionRepository, instance=True)` then assign `AsyncMock()` to each async method. Never use `MagicMock` without a spec.
-- Router tests override `get_session_service` via `app.dependency_overrides` and use `TestClient(app, raise_server_exceptions=False)`.
-- Fixture pattern: `dummy_logger` (NullHandler), `test_config` (uses `tmp_path` for file tests), mock repo, service/router fixtures.
+- `pytest.ini` sets `asyncio_mode = auto`.
+- Coverage is always on (`--cov=src`).
+- Provider tests use lightweight mocks (`AsyncMock`, `MagicMock`,
+  `PropertyMock`) and `SimpleNamespace` test payloads.
+- `tests/providers/conftest.py` patches `yapa.providers.base.get_logger`
+  automatically to avoid writing real log files during tests.
 
-## Repository error contract
+## Provider Error Contract
 
-Repository methods never return sentinel values. They raise:
+Provider-layer custom exceptions live in `src/yapa/providers/exceptions.py`:
 
 | Exception | Raised by |
 |---|---|
-| `SessionNotFoundError` | `load()`, `delete()` when session is missing |
-| `SessionSaveError` | `save()` on I/O failure |
-| `SessionLoadError` | `load()`, `load_all()` on I/O or parse failure |
-| `SessionDeleteError` | `delete()` on I/O failure |
+| `ModelsFetchError` | `InferenceProvider.get_models()` on provider model-list failures |
+| `ModelInvocationError` | `InferenceProvider.invoke_model()` on streaming invocation failures |
 
-The service layer catches `SessionNotFoundError` → returns `None`/`False`. All other exceptions propagate to the router → HTTP 500.
+`ProviderManager.get_provider_by_model()` catches `ModelsFetchError` per provider
+and continues to the next provider.
 
 ## Conventions
 
-- **Package root**: `src/yapa/`. Import as `from yapa.shared import Config`, `from yapa.core.repositories import SessionRepository`.
-- **Config file**: `~/.yapa/config.json` (see `src/yapa/shared/config.py`).
-- **Logging**: `from yapa.shared import get_logger; logger = get_logger("core", console=True)` writes to `~/.yapa/logs/{date}/core.log`.
-- **Docstrings**: Required (ruff D100–D107). Use line comments sparingly.
-- **Line length**: 88 (enforced by ruff).
+- **Package root**: `src/yapa/`.
+- **Import style**:
+  - `from yapa.config import Config, get_config`
+  - `from yapa.logging import get_logger`
+  - `from yapa.providers import ProviderManager`
+  - `from yapa.models import UserMessage, StreamDelta, InferenceParams`
+- **Config file**: `~/.yapa/config.json`.
+- **Logs directory**: `~/.yapa/logs/{YYYY-MM-DD}/`.
+- **Docstrings**: required (ruff docstring rules enabled).
+- **Line length**: 88.
 - **Python**: 3.13+.
-- **No generated code, migrations, codegen, or build artifacts.** Just the lockfile (`uv.lock`).
+- **No generated artifacts**: do not commit build/codegen output.
 
 ## Don't
 
-- Don't edit `ruff.toml` or `ty.toml` to bypass lint/type rules — fix the code instead.
-- Don't use JSON for config storage without writing a test for it first.
+- Don't bypass lint/type rules by weakening `ruff.toml` or `ty.toml`.
+- Don't add config/model behavior without tests when it changes runtime behavior.

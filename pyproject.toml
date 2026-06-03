@@ -5,16 +5,12 @@ description = "A terminal-based personal assistant"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "fastapi>=0.136.1",
     "httpx>=0.28.1",
     "openai>=2.36.0",
-    "orjson>=3.11.9",
     "pydantic>=2.13.4",
     "python-dotenv>=1.2.2",
-    "requests>=2.34.2",
-    "rich>=14.0.0",
-    "textual>=8.2.5",
-    "uvicorn>=0.46.0",
+    "rich>=15.0.0",
+    "typer>=0.26.7",
     "websockets>=16.0",
 ]
 
