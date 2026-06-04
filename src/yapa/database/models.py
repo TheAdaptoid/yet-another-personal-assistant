@@ -5,7 +5,7 @@ from uuid import uuid4
 
 from sqlmodel import Field, Relationship, SQLModel
 
-from yapa.models.message import Message
+from yapa.models.message import AssistantMessage, Message, SystemMessage, UserMessage
 
 
 class BaseTable(SQLModel):
@@ -105,3 +105,35 @@ class MessageTable(BaseTable, table=True):
             content=message.content,
             model=getattr(message, "model", None),
         )
+
+    def to_pydantic(self) -> UserMessage | SystemMessage | AssistantMessage:
+        """
+        Convert this MessageTable to the corresponding Pydantic message type.
+
+        Returns:
+            The Pydantic message instance matching the stored role.
+        """
+        if self.role == "user":
+            return UserMessage(
+                id=self.id,
+                created_at=self.created_at,
+                updated_at=self.updated_at,
+                content=self.content,
+            )
+        if self.role == "assistant":
+            return AssistantMessage(
+                id=self.id,
+                created_at=self.created_at,
+                updated_at=self.updated_at,
+                content=self.content,
+                model=self.model,
+            )
+        if self.role == "system":
+            return SystemMessage(
+                id=self.id,
+                created_at=self.created_at,
+                updated_at=self.updated_at,
+                content=self.content,
+            )
+        msg = f"Unknown role: {self.role}"
+        raise ValueError(msg)

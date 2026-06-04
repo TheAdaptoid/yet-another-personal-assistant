@@ -56,6 +56,22 @@ class TestListAll:
         assert [s.id for s in all_sessions] == [s3.id, s2.id, s1.id]
 
 
+class TestRename:
+    """Tests for SessionRepository.rename()."""
+
+    def test_updates_title(self) -> None:
+        """Should update the session title."""
+        session = SessionRepository.create(title="old")
+        renamed = SessionRepository.rename(session.id, "new")
+        assert renamed.title == "new"
+        assert renamed.id == session.id
+
+    def test_raises_value_error_for_missing(self) -> None:
+        """Should raise ValueError when the session does not exist."""
+        with pytest.raises(ValueError, match="not found"):
+            SessionRepository.rename("nonexistent", "new title")
+
+
 class TestDelete:
     """Tests for SessionRepository.delete()."""
 

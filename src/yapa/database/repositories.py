@@ -63,6 +63,17 @@ class SessionRepository:
             return list(db.exec(stmt).all())
 
     @staticmethod
+    def rename(session_id: str, title: str) -> SessionTable:
+        """Rename a session. Raises ValueError if not found."""
+        session = SessionRepository.get(session_id)
+        with get_session() as db:
+            session.title = title
+            db.add(session)
+            db.commit()
+            db.refresh(session)
+            return session
+
+    @staticmethod
     def delete(session_id: str) -> None:
         """
         Delete a session and its messages.
