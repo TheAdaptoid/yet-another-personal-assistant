@@ -12,7 +12,10 @@ src/yapa/
 ├── logging.py       # File + optional console logging
 ├── cli/
 │   ├── __init__.py
-│   └── cli.py       # Typer commands: `models`, `invoke`
+│   ├── app.py        # Typer routing
+│   ├── chat.py       # run_conversation()
+│   ├── models.py     # list_models()
+│   └── sessions.py   # session commands
 ├── models/
 │   ├── inference.py # InferenceParams, ModelData, StreamDelta
 │   └── message.py   # User/System/Assistant message models
@@ -31,7 +34,7 @@ There is currently no `src/yapa/core/`, `src/yapa/shared/`, or `src/yapa/tui/`.
 ```bash
 uv run python -m yapa                              # run CLI
 uv run python -m yapa models                       # list models
-uv run python -m yapa invoke                       # interactive chat loop
+uv run python -m yapa chat                       # interactive chat loop
 uv run pytest tests/ -v                            # full test suite
 uv run pytest tests/providers/ -v                  # provider tests
 uv run pytest tests/providers/test_manager.py -v   # single test file

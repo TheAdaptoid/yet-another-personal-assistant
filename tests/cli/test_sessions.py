@@ -1,0 +1,46 @@
+"""Tests for session command handlers."""
+
+from yapa.cli.sessions import delete_session, list_sessions, rename_session
+from yapa.database import SessionRepository
+
+
+def test_list_sessions_empty(capsys):
+    """list_sessions prints a dim message when no sessions exist."""
+    list_sessions()
+    captured = capsys.readouterr()
+    assert "No sessions" in captured.out
+
+
+def test_list_sessions_with_sessions(capsys, seeded_session):
+    """list_sessions prints a table when sessions exist."""
+    list_sessions()
+    captured = capsys.readouterr()
+    assert seeded_session.id[:8] in captured.out
+    assert seeded_session.title in captured.out
+
+
+def test_rename_session_success(seeded_session):
+    """rename_session updates the title and prints confirmation."""
+    rename_session(seeded_session.id, "My Title")
+    updated = SessionRepository.get(seeded_session.id)
+    assert updated.title == "My Title"
+
+
+def test_rename_session_missing(capsys):
+    """rename_session prints an error for a nonexistent session."""
+    rename_session("nonexistent", "New Title")
+    captured = capsys.readouterr()
+    assert "Error" in captured.out
+
+
+def test_delete_session_success(seeded_session):
+    """delete_session removes the session and prints confirmation."""
+    delete_session(seeded_session.id)
+    assert SessionRepository.list_all() == []
+
+
+def test_delete_session_missing(capsys):
+    """delete_session prints an error for a nonexistent session."""
+    delete_session("nonexistent")
+    captured = capsys.readouterr()
+    assert "Error" in captured.out

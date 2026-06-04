@@ -16,3 +16,4 @@ def patch_get_engine():
     SQLModel.metadata.create_all(engine)
     with patch("yapa.database.engine.get_engine", return_value=engine):
         yield
+    engine.dispose()

@@ -30,7 +30,9 @@ class BaseMessage(ABC, BaseModel):
     )
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
-        sa_column_kwargs={"onupdate": lambda: datetime.now(timezone.utc)},
+        json_schema_extra={
+            "sa_column_kwargs": {"onupdate": lambda: datetime.now(timezone.utc)},
+        },
     )
     role: Literal["user", "assistant", "system"]
     content: str
