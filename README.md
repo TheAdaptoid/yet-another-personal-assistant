@@ -1,13 +1,15 @@
 # Yet Another Personal Assistant (YAPA)
 
-YAPA is a terminal-first assistant with a Typer CLI and pluggable inference
-providers.
+YAPA is a terminal-first assistant with a Typer CLI, SQLite-backed session
+persistence, and pluggable inference providers.
 
 ## What it does today
 
-- Lists available models from configured providers
+- Lists available models from configured providers (grouped by vendor prefix)
 - Runs an interactive chat loop with streaming responses
 - Supports provider selection by model ID via a provider manager
+- Persists conversations as sessions in a local SQLite database (`~/.yapa/yapa.db`)
+- Manages sessions (list, rename, delete) via CLI commands
 
 Current providers:
 
@@ -21,18 +23,14 @@ Current providers:
 
    ```bash
    uv sync
-   uv sync --dev
    ```
 
 3. Configure environment variables (example):
 
    ```bash
    OPENROUTER_API_KEY=your_openrouter_api_key
-   OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
    LMSTUDIO_API_KEY=your_lmstudio_api_key_or_placeholder
-   LMSTUDIO_BASE_URL=http://localhost:1234/v1
    YAPA_DEFAULT_MODEL=openrouter/free
-   YAPA_DATA_DIR=~/.yapa
    YAPA_LOG_LEVEL=INFO
    ```
 
@@ -46,18 +44,32 @@ Run the CLI:
 uv run python -m yapa
 ```
 
-List models:
+List models (grouped by vendor):
 
 ```bash
 uv run python -m yapa models
 uv run python -m yapa models openrouter
 ```
 
-Start interactive chat:
+Start interactive chat (auto-creates a session):
 
 ```bash
-uv run python -m yapa invoke
-uv run python -m yapa invoke openrouter/free
+uv run python -m yapa chat
+uv run python -m yapa chat --model openrouter/free
+```
+
+Resume a previous session:
+
+```bash
+uv run python -m yapa chat --session <session-id> --model openrouter/free
+```
+
+Manage sessions:
+
+```bash
+uv run python -m yapa sessions list
+uv run python -m yapa sessions rename <session-id> "New Title"
+uv run python -m yapa sessions delete <session-id>
 ```
 
 Type `exit` or `quit` to leave the chat loop.
@@ -80,7 +92,8 @@ uv run ruff check src/ tests/ && uv run ty check src/ && uv run pytest tests/ -v
 
 ```text
 src/yapa/
-  cli/         # Typer commands
+  cli/         # Typer commands (app, chat, models, sessions)
+  database/    # SQLite models, engine, repositories (sqlmodel)
   models/      # Message and inference data models
   providers/   # Provider abstraction + implementations
   config.py    # Config loading and persistence
