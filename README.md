@@ -17,6 +17,32 @@ Current providers:
 - `openrouter`
 - `lmstudio`
 
+## Installation
+
+Install globally with `uv` (recommended):
+
+```bash
+uv tool install git+https://github.com/TheAdaptoid/yet-another-personal-assistant
+```
+
+After installation the `yapa` command is available from any directory:
+
+```bash
+yapa --help
+```
+
+To run without installing (temporary, uses a cached ephemeral environment):
+
+```bash
+uvx yapa --help
+```
+
+To upgrade an existing installation:
+
+```bash
+uv tool upgrade yapa
+```
+
 ## Development setup
 
 1. Clone the repository.
@@ -40,7 +66,13 @@ override file values.
 
 ## Usage
 
-Run the CLI:
+From an installed copy:
+
+```bash
+yapa --help
+```
+
+From a development checkout:
 
 ```bash
 uv run python -m yapa
@@ -49,38 +81,41 @@ uv run python -m yapa
 List models (grouped by vendor):
 
 ```bash
-uv run python -m yapa models
-uv run python -m yapa models --provider openrouter
+yapa models
+yapa models --provider openrouter
 ```
 
 Set the default model (validates the model exists):
 
 ```bash
-uv run python -m yapa models --set openrouter/free
-uv run python -m yapa models --provider openrouter --set openai/gpt-4o
+yapa models --set openrouter/free
+yapa models --provider openrouter --set openai/gpt-4o
 ```
 
 Start interactive chat (auto-creates a session):
 
 ```bash
-uv run python -m yapa chat
-uv run python -m yapa chat --model openrouter/free
+yapa chat
+yapa chat --model openrouter/free
 ```
 
 Resume a previous session:
 
 ```bash
-uv run python -m yapa chat --session <session-id> --model openrouter/free
+yapa chat --session <session-id> --model openrouter/free
 ```
 
 Manage sessions:
 
 ```bash
-uv run python -m yapa sessions list
-uv run python -m yapa sessions rename <session-id> "New Title"
-uv run python -m yapa sessions delete <session-id>
-uv run python -m yapa sessions delete --purge       # delete empty sessions
+yapa sessions list
+yapa sessions rename <session-id> "New Title"
+yapa sessions delete <session-id>
+yapa sessions delete --purge       # delete empty sessions
 ```
+
+> **Note:** All examples below use the installed `yapa` command. Replace with
+> `uv run python -m yapa` when running from a development checkout.
 
 Within a chat session the following slash commands are available:
 
