@@ -85,6 +85,10 @@ class ProviderService:
 
         Raises:
             ValueError: If no provider serves the given model ID.
+
+        Note:
+            The current iteration strategy is slow. This method will need to be
+            revisited and optimized at a later time.
         """
         all_models = await self.get_models()
         for pid, models in all_models.items():
