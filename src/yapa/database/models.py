@@ -5,7 +5,13 @@ from uuid import uuid4
 
 from sqlmodel import Field, Relationship, SQLModel
 
-from yapa.models.message import AssistantMessage, Message, SystemMessage, UserMessage
+from yapa.models import (
+    AssistantMessage,
+    Message,
+    SessionSummary,
+    SystemMessage,
+    UserMessage,
+)
 
 
 class BaseTable(SQLModel):
@@ -44,6 +50,7 @@ class SessionTable(BaseTable, table=True):
     messages: list["MessageTable"] = Relationship(
         back_populates="session",
         cascade_delete=True,
+        sa_relationship_kwargs={"lazy": "selectin"},
     )
 
     @classmethod
@@ -59,6 +66,21 @@ class SessionTable(BaseTable, table=True):
             SessionTable: The created session instance.
         """
         return cls(title=title or "New Session")
+
+    def to_summary(self) -> "SessionSummary":
+        """
+        Convert this SessionTable to a SessionSummary.
+
+        Returns:
+            SessionSummary: A summary of the session for list display.
+        """
+        return SessionSummary(
+            id=self.id,
+            title=self.title,
+            created_at=self.created_at,
+            updated_at=self.updated_at,
+            message_count=len(self.messages),
+        )
 
 
 class MessageTable(BaseTable, table=True):

@@ -104,7 +104,7 @@ and continues to the next provider.
 
 - `chat` auto-creates a session when `--session` is not provided.
 - Resuming requires an explicit `--model` (no auto-detection from history).
-- Session IDs are shown as the first 8 hex chars in CLI output.
+- Full session IDs are shown in CLI output.
 - `SessionRepository.get()` and `delete()` raise `ValueError` on missing session.
 
 ## Model Display

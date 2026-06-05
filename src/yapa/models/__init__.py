@@ -8,6 +8,7 @@ from .message import (
     SystemMessage,
     UserMessage,
 )
+from .session import SessionSummary
 
 __all__ = [
     "AssistantMessage",
@@ -18,4 +19,5 @@ __all__ = [
     "UserMessage",
     "ModelData",
     "StreamDelta",
+    "SessionSummary",
 ]

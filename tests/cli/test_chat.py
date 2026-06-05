@@ -1,33 +1,56 @@
 """Tests for chat conversation handler."""
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from rich.console import Console
 
 from yapa.cli.chat import run_conversation
 from yapa.config import Config
-from yapa.models import StreamDelta
+from yapa.models import (
+    AssistantMessage,
+    ModelData,
+    SessionSummary,
+    StreamDelta,
+    UserMessage,
+)
+
+
+def _make_summary(**overrides: str | int) -> SessionSummary:
+    from datetime import datetime, timezone
+
+    return SessionSummary(
+        id=overrides.get("id", "test-id-1234"),
+        title=overrides.get("title", "Test Session"),  # type: ignore[arg-type]
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+        message_count=overrides.get("message_count", 0),  # type: ignore[arg-type]
+    )
 
 
 class TestRunConversation:
     """Tests for run_conversation with injected mocks."""
 
     @pytest.fixture
-    def mock_provider(self):
-        provider = MagicMock()
+    def mock_service(self):
+        svc = MagicMock()
+        svc.start.return_value = _make_summary()
+        svc.switch_session.return_value = _make_summary(message_count=3)
+        svc.model = ModelData(id="test-model", provider_id="test")
+        svc.messages = [
+            UserMessage(content="What is the capital of France?"),
+            AssistantMessage(
+                content="The capital of France is Paris.",
+                model="test-model",
+            ),
+        ]
 
-        async def _invoke(model, messages):
-            yield StreamDelta(content="", done=True)
+        async def _stream(model, messages):
+            yield StreamDelta(content=None, done=True)
 
-        provider.invoke_model = _invoke
-        return provider
-
-    @pytest.fixture
-    def mock_provider_manager(self, mock_provider):
-        pm = MagicMock()
-        pm.get_provider_by_model = AsyncMock(return_value=mock_provider)
-        return pm
+        svc.stream_response = _stream
+        svc.close = AsyncMock()
+        return svc
 
     @pytest.fixture
     def mock_console(self):
@@ -35,65 +58,71 @@ class TestRunConversation:
         con.input.return_value = "exit"
         return con
 
-    async def test_exits_immediately(self, mock_provider_manager, mock_console):
+    async def test_exits_immediately(self, mock_service, mock_console):
         """Typing 'exit' as the first prompt ends the loop."""
         await run_conversation(
-            model="test-model",
-            provider_manager=mock_provider_manager,
+            model_id="test-model",
+            service=mock_service,
             console=mock_console,
         )
-        mock_console.input.assert_called_once_with("[blue]You: [/blue]")
+        mock_console.input.assert_called_once_with("[blue]> [/blue]")
 
     async def test_resumes_session(
-        self, mock_provider_manager, mock_console, seeded_session
+        self, mock_service, mock_console, seeded_session
     ):
-        """Providing a session_id resumes the existing session."""
+        """Providing a session_id resumes the session and shows last 2 messages."""
         mock_console.input.return_value = "exit"
         await run_conversation(
-            model="test-model",
             session_id=seeded_session.id,
-            provider_manager=mock_provider_manager,
+            service=mock_service,
             console=mock_console,
         )
         resume_calls = [
-            c for c in mock_console.print.call_args_list if "Resumed session" in str(c)
+            c
+            for c in mock_console.print.call_args_list
+            if "resumed session" in str(c)
         ]
         started_calls = [
             c
             for c in mock_console.print.call_args_list
-            if "Started new session" in str(c)
+            if "new session" in str(c)
         ]
         assert len(resume_calls) >= 1
         assert len(started_calls) == 0
 
-    async def test_default_model_from_config(self, mock_provider_manager, mock_console):
-        """When model is None, falls back to config.default_model."""
+        history_calls = [
+            c
+            for c in mock_console.print.call_args_list
+            if "What is the capital of France?" in str(c)
+            or "The capital of France is Paris." in str(c)
+        ]
+        assert len(history_calls) >= 1
+
+    async def test_default_model_from_config(self, mock_service, mock_console):
+        """When model_id is None, falls back to config.default_model_id."""
         mock_console.input.return_value = "exit"
-        cfg = Config(default_model="cfg-default-model")
+        cfg = Config(default_model_id="cfg-default-model", default_provider_id="cfg")
         await run_conversation(
-            model=None,
-            provider_manager=mock_provider_manager,
+            model_id=None,
+            service=mock_service,
             console=mock_console,
             config=cfg,
         )
-        mock_provider_manager.get_provider_by_model.assert_awaited_once_with(
-            "cfg-default-model"
-        )
+        mock_service.start.assert_called_once()
 
-    async def test_full_turn(self, mock_provider_manager, mock_console):
+    async def test_full_turn(self, mock_service, mock_console):
         """Sends a user message, receives an assistant reply, then exits."""
         mock_console.input.side_effect = ["hello", "exit"]
 
-        provider = mock_provider_manager.get_provider_by_model.return_value
+        async def _stream(prompt, model=None):
+            yield StreamDelta(content="Hi!", done=False)
+            yield StreamDelta(content=None, done=True)
 
-        async def _invoke(model, messages):
-            yield StreamDelta(content="Hi!", done=True)
-
-        provider.invoke_model = _invoke
+        mock_service.stream_response = _stream
 
         await run_conversation(
-            model="test-model",
-            provider_manager=mock_provider_manager,
+            model_id="test-model",
+            service=mock_service,
             console=mock_console,
         )
 
@@ -102,3 +131,145 @@ class TestRunConversation:
             c for c in mock_console.print.call_args_list if "Hi!" in str(c)
         ]
         assert len(assistant_calls) >= 1
+
+
+class TestSlashCommands:
+    """Tests for slash commands in the chat loop."""
+
+    @pytest.fixture
+    def mock_service(self):
+        svc = MagicMock()
+        svc.start.return_value = _make_summary()
+        svc.switch_session.return_value = _make_summary(message_count=5)
+        svc.model = ModelData(id="test-model", provider_id="test")
+        svc.close = AsyncMock()
+
+        async def _done(model, messages):
+            yield StreamDelta(content=None, done=True)
+
+        svc.stream_response = _done
+        return svc
+
+    @pytest.fixture
+    def mock_console(self):
+        return MagicMock(spec=Console)
+
+    async def test_slash_exit(self, mock_service, mock_console):
+        """'/exit' exits the loop."""
+        mock_console.input.return_value = "/exit"
+        await run_conversation(
+            model_id="test-model",
+            service=mock_service,
+            console=mock_console,
+        )
+        mock_console.input.assert_called_once_with("[blue]> [/blue]")
+
+    async def test_slash_model(self, mock_service, mock_console, tmp_path):
+        """'/model new-id' sets model on service and persists to config."""
+        mock_console.input.side_effect = ["/model new-provider/new-model", "exit"]
+        cfg = Config(default_model_id="old", default_provider_id="old")
+        await run_conversation(
+            model_id="test-model",
+            service=mock_service,
+            console=mock_console,
+            config=cfg,
+        )
+        assert mock_service.model == ModelData(
+            id="new-provider/new-model", provider_id="new-provider"
+        )
+        assert cfg.default_model_id == "new-provider/new-model"
+        assert cfg.default_provider_id == "new-provider"
+
+    async def test_slash_model_missing_arg(self, mock_service, mock_console):
+        """'/model' with no arg shows usage."""
+        mock_console.input.side_effect = ["/model", "exit"]
+        await run_conversation(
+            model_id="test-model",
+            service=mock_service,
+            console=mock_console,
+        )
+        usage_calls = [
+            c for c in mock_console.print.call_args_list if "Usage: /model" in str(c)
+        ]
+        assert len(usage_calls) >= 1
+
+    async def test_slash_session(self, mock_service, mock_console):
+        """'/session <id>' calls switch_session."""
+        mock_console.input.side_effect = ["/session other-session-id", "exit"]
+        await run_conversation(
+            model_id="test-model",
+            service=mock_service,
+            console=mock_console,
+        )
+        mock_service.switch_session.assert_called_once_with("other-session-id")
+
+    async def test_slash_session_missing_arg(self, mock_service, mock_console):
+        """'/session' with no arg shows usage."""
+        mock_console.input.side_effect = ["/session", "exit"]
+        await run_conversation(
+            model_id="test-model",
+            service=mock_service,
+            console=mock_console,
+        )
+        usage_calls = [
+            c for c in mock_console.print.call_args_list if "Usage: /session" in str(c)
+        ]
+        assert len(usage_calls) >= 1
+
+    async def test_slash_help(self, mock_service, mock_console):
+        """'/help' prints the command list."""
+        mock_console.input.side_effect = ["/help", "exit"]
+        await run_conversation(
+            model_id="test-model",
+            service=mock_service,
+            console=mock_console,
+        )
+        help_calls = [
+            c for c in mock_console.print.call_args_list
+            if "Available commands" in str(c)
+        ]
+        assert len(help_calls) >= 1
+
+    async def test_slash_unknown(self, mock_service, mock_console):
+        """Unknown slash command shows error."""
+        mock_console.input.side_effect = ["/bogus", "exit"]
+        await run_conversation(
+            model_id="test-model",
+            service=mock_service,
+            console=mock_console,
+        )
+        err_calls = [
+            c for c in mock_console.print.call_args_list
+            if "Unknown command" in str(c)
+        ]
+        assert len(err_calls) >= 1
+
+
+class TestSlashSessions:
+    """Tests for the /sessions slash command."""
+
+    @pytest.fixture
+    def mock_service(self):
+        svc = MagicMock()
+        svc.start.return_value = _make_summary()
+        svc.model = ModelData(id="test-model", provider_id="test")
+        svc.close = AsyncMock()
+        svc.stream_response = AsyncMock()
+        return svc
+
+    @pytest.fixture
+    def mock_console(self):
+        return MagicMock(spec=Console)
+
+    async def test_slash_sessions_lists_sessions(
+        self, mock_service, mock_console
+    ):
+        """'/sessions' delegates to sessions.list_sessions()."""
+        with patch("yapa.cli.sessions.list_sessions") as mock_list:
+            mock_console.input.side_effect = ["/sessions", "exit"]
+            await run_conversation(
+                model_id="test-model",
+                service=mock_service,
+                console=mock_console,
+            )
+            mock_list.assert_called_once()

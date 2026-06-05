@@ -2,7 +2,7 @@
 
 from openai import AsyncOpenAI
 
-from yapa.config import get_config
+from yapa.config import Config, get_config
 
 from .base import InferenceProvider
 
@@ -10,17 +10,15 @@ from .base import InferenceProvider
 class LMStudioIP(InferenceProvider):
     """Inference provider for LM Studio."""
 
-    def __init__(
-        self,
-    ):
+    def __init__(self, config: Config | None = None):
         """
         Initialize a new LM Studio inference provider.
 
         Args:
-            logger (logging.Logger): The logger to use for this provider.
+            config: Optional config override. Falls back to get_config().
         """
-        config = get_config()
+        cfg = config or get_config()
         client = AsyncOpenAI(
-            api_key=config.lmstudio_api_key, base_url=config.lmstudio_base_url
+            api_key=cfg.lmstudio_api_key, base_url=cfg.lmstudio_base_url
         )
         super().__init__(identifier="lmstudio", name="LM Studio", client=client)
