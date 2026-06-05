@@ -73,6 +73,26 @@ class ProviderService:
             raise ValueError(f"No provider found that supports model '{model.id}'")
         return provider
 
+    async def get_provider_by_model_id(self, model_id: str) -> InferenceProvider:
+        """
+        Find the provider whose model list contains the given model ID.
+
+        Args:
+            model_id: The model identifier to look up.
+
+        Returns:
+            The InferenceProvider that serves this model.
+
+        Raises:
+            ValueError: If no provider serves the given model ID.
+        """
+        all_models = await self.get_models()
+        for pid, models in all_models.items():
+            for m in models:
+                if m.id == model_id:
+                    return self.get_provider(pid)
+        raise ValueError(f"No provider found that supports model '{model_id}'")
+
     async def get_models(
         self, provider_id: str | None = None
     ) -> dict[str, list[ModelData]]:

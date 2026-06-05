@@ -64,6 +64,22 @@ class ConversationService:
         """Set the model to use for this conversation."""
         self._model = model
 
+    async def resolve_model(self, model_id: str) -> ModelData:
+        """
+        Resolve a model ID string to a ModelData with the correct provider.
+
+        Args:
+            model_id: The model identifier to resolve.
+
+        Returns:
+            ModelData with the correct provider_id.
+
+        Raises:
+            ValueError: If no provider serves the given model ID.
+        """
+        provider = await self._ps.get_provider_by_model_id(model_id)
+        return ModelData(id=model_id, provider_id=provider.id)
+
     def _save_message(self, message: Message) -> None:
         """Persist a message to the current session."""
         if not self._session_id:

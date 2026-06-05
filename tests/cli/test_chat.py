@@ -50,6 +50,9 @@ class TestRunConversation:
 
         svc.stream_response = _stream
         svc.close = AsyncMock()
+        svc.resolve_model = AsyncMock(
+            return_value=ModelData(id="test-model", provider_id="test")
+        )
         return svc
 
     @pytest.fixture
@@ -148,6 +151,9 @@ class TestSlashCommands:
             yield StreamDelta(content=None, done=True)
 
         svc.stream_response = _done
+        svc.resolve_model = AsyncMock(
+            return_value=ModelData(id="test-model", provider_id="test")
+        )
         return svc
 
     @pytest.fixture
@@ -165,7 +171,12 @@ class TestSlashCommands:
         mock_console.input.assert_called_once_with("[blue]> [/blue]")
 
     async def test_slash_model(self, mock_service, mock_console, tmp_path):
-        """'/model new-id' sets model on service and persists to config."""
+        """'/model <id>' resolves the model and persists to config."""
+        mock_service.resolve_model = AsyncMock(
+            return_value=ModelData(
+                id="new-provider/new-model", provider_id="real-provider"
+            )
+        )
         mock_console.input.side_effect = ["/model new-provider/new-model", "exit"]
         cfg = Config(default_model_id="old", default_provider_id="old")
         await run_conversation(
@@ -175,10 +186,10 @@ class TestSlashCommands:
             config=cfg,
         )
         assert mock_service.model == ModelData(
-            id="new-provider/new-model", provider_id="new-provider"
+            id="new-provider/new-model", provider_id="real-provider"
         )
         assert cfg.default_model_id == "new-provider/new-model"
-        assert cfg.default_provider_id == "new-provider"
+        assert cfg.default_provider_id == "real-provider"
 
     async def test_slash_model_missing_arg(self, mock_service, mock_console):
         """'/model' with no arg shows usage."""
@@ -255,6 +266,9 @@ class TestSlashSessions:
         svc.model = ModelData(id="test-model", provider_id="test")
         svc.close = AsyncMock()
         svc.stream_response = AsyncMock()
+        svc.resolve_model = AsyncMock(
+            return_value=ModelData(id="test-model", provider_id="test")
+        )
         return svc
 
     @pytest.fixture
