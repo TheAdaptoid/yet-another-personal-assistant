@@ -4,15 +4,8 @@ from rich.console import Console
 from rich.rule import Rule
 
 from yapa.config import Config, get_config, save_config
-from yapa.models import AssistantMessage, ModelData, SessionSummary
+from yapa.models import AssistantMessage, SessionSummary
 from yapa.services import ConversationError, ConversationService
-
-
-def _parse_model(model_id: str) -> ModelData:
-    """Build a ModelData from a model-id string (e.g. 'openrouter/free')."""
-    provider_id = model_id.split("/", 1)[0] if "/" in model_id else "other"
-    return ModelData(id=model_id, provider_id=provider_id)
-
 
 _HELP_TEXT = """\
 [bold]Available commands:[/bold]
@@ -24,7 +17,7 @@ _HELP_TEXT = """\
 """
 
 
-def _handle_slash_command(
+async def _handle_slash_command(
     cmd: str,
     arg: str,
     svc: ConversationService,
@@ -42,7 +35,11 @@ def _handle_slash_command(
         if not arg:
             con.print("[red]Usage: /model <model-id>[/red]")
             return
-        parsed = _parse_model(arg)
+        try:
+            parsed = await svc.resolve_model(arg)
+        except ValueError as e:
+            con.print(f"[red]{e}[/red]")
+            return
         svc.model = parsed
         cfg.default_model_id = parsed.id
         cfg.default_provider_id = parsed.provider_id
@@ -163,7 +160,7 @@ async def run_conversation(
     con = console or Console()
     svc = service or ConversationService(config=cfg)
 
-    model = _parse_model(model_id) if model_id else None
+    model = await svc.resolve_model(model_id) if model_id else None
     if model is not None:
         svc.model = model
 
@@ -204,7 +201,7 @@ async def run_conversation(
                     except ValueError as e:
                         con.print(f"[red]{e}[/red]")
                 else:
-                    _handle_slash_command(cmd, arg, svc, cfg, con)
+                    await _handle_slash_command(cmd, arg, svc, cfg, con)
 
                 continue
 
