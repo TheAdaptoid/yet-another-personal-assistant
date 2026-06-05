@@ -6,10 +6,11 @@ persistence, and pluggable inference providers.
 ## What it does today
 
 - Lists available models from configured providers (grouped by vendor prefix)
+- Sets a default model via `--set` and scoped provider lookup via `--provider`
 - Runs an interactive chat loop with streaming responses
-- Supports provider selection by model ID via a provider manager
+- Supports slash commands for in-chat model/session switching and help
 - Persists conversations as sessions in a local SQLite database (`~/.yapa/yapa.db`)
-- Manages sessions (list, rename, delete) via CLI commands
+- Manages sessions (list, rename, delete, purge) via CLI commands
 
 Current providers:
 
@@ -25,16 +26,17 @@ Current providers:
    uv sync
    ```
 
-3. Configure environment variables (example):
+3. Configure environment variables (example, or add to a `.env` file):
 
    ```bash
    OPENROUTER_API_KEY=your_openrouter_api_key
    LMSTUDIO_API_KEY=your_lmstudio_api_key_or_placeholder
-   YAPA_DEFAULT_MODEL=openrouter/free
+   YAPA_DEFAULT_MODEL_ID=openrouter/free
    YAPA_LOG_LEVEL=INFO
    ```
 
-Configuration can also be persisted to `~/.yapa/config.json`.
+Configuration can also be persisted to `~/.yapa/config.json`. Environment variables
+override file values.
 
 ## Usage
 
@@ -48,7 +50,14 @@ List models (grouped by vendor):
 
 ```bash
 uv run python -m yapa models
-uv run python -m yapa models openrouter
+uv run python -m yapa models --provider openrouter
+```
+
+Set the default model (validates the model exists):
+
+```bash
+uv run python -m yapa models --set openrouter/free
+uv run python -m yapa models --provider openrouter --set openai/gpt-4o
 ```
 
 Start interactive chat (auto-creates a session):
@@ -70,9 +79,18 @@ Manage sessions:
 uv run python -m yapa sessions list
 uv run python -m yapa sessions rename <session-id> "New Title"
 uv run python -m yapa sessions delete <session-id>
+uv run python -m yapa sessions delete --purge       # delete empty sessions
 ```
 
-Type `exit` or `quit` to leave the chat loop.
+Within a chat session the following slash commands are available:
+
+| Command | Description |
+|---|---|
+| `/help` | Show available commands |
+| `/exit` | Exit the chat session |
+| `/model <model-id>` | Switch to a different model |
+| `/session <session-id>` | Switch to a different session |
+| `/sessions` | List all sessions |
 
 ## Quality checks
 
@@ -94,8 +112,9 @@ uv run ruff check src/ tests/ && uv run ty check src/ && uv run pytest tests/ -v
 src/yapa/
   cli/         # Typer commands (app, chat, models, sessions)
   database/    # SQLite models, engine, repositories (sqlmodel)
-  models/      # Message and inference data models
-  providers/   # Provider abstraction + implementations
+  models/      # Message, inference, and session data models
+  providers/   # Provider abstraction + implementations (OpenRouter, LM Studio)
+  services/    # UI-agnostic business logic (conversation, session, provider services)
   config.py    # Config loading and persistence
   logging.py   # File and console logging helpers
 ```

@@ -13,8 +13,6 @@ cli = Typer()
 sessions_app = Typer()
 cli.add_typer(sessions_app, name="sessions", help="Manage conversation sessions")
 
-# --- Models command ---
-
 
 @cli.command()
 def models(
@@ -35,9 +33,6 @@ def models(
         pass
 
 
-# --- Chat command ---
-
-
 @cli.command(name="chat")
 def chat(
     model: str | None = None,
@@ -48,9 +43,6 @@ def chat(
         asyncio.run(run_conversation(model_id=model, session_id=session))
     except KeyboardInterrupt:
         pass
-
-
-# --- Session management commands ---
 
 
 @sessions_app.command(name="list")

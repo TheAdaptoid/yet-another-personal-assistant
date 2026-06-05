@@ -24,32 +24,39 @@ src/yapa/
 │   └── repositories.py  # SessionRepository CRUD
 ├── models/
 │   ├── inference.py # InferenceParams, ModelData, StreamDelta
-│   └── message.py   # User/System/Assistant message models
-└── providers/
-    ├── base.py      # InferenceProvider base class
-    ├── exceptions.py
-    ├── lmstudio.py
-    ├── manager.py   # ProviderManager
-    └── openrouter.py
+│   ├── message.py   # User/System/Assistant message models
+│   └── session.py   # SessionSummary
+├── providers/
+│   ├── base.py      # InferenceProvider base class
+│   ├── exceptions.py
+│   ├── lmstudio.py
+│   └── openrouter.py
+└── services/
+    ├── conversation.py  # ConversationService — chat orchestration
+    ├── exceptions.py    # ConversationError
+    ├── provider.py      # ProviderService — provider/model management
+    └── session.py       # SessionService — session CRUD
 ```
-
-There is currently no `src/yapa/core/`, `src/yapa/shared/`, or `src/yapa/tui/`.
 
 ## Key Commands
 
 ```bash
 uv run python -m yapa                              # run CLI
 uv run python -m yapa models                       # list models (grouped)
+uv run python -m yapa models --set <id>            # set default model
+uv run python -m yapa models --provider <id>       # scope to a provider
 uv run python -m yapa chat                         # interactive chat loop
 uv run python -m yapa chat --model <id>            # chat with a specific model
 uv run python -m yapa chat --session <id>          # resume a session
 uv run python -m yapa sessions list                # list sessions
 uv run python -m yapa sessions rename <id> <title> # rename a session
 uv run python -m yapa sessions delete <id>         # delete a session
+uv run python -m yapa sessions delete --purge      # delete empty sessions
 uv run pytest tests/ -v                            # full test suite
 uv run pytest tests/cli/ -v                        # CLI tests
 uv run pytest tests/database/ -v                   # database tests
 uv run pytest tests/providers/ -v                  # provider tests
+uv run pytest tests/services/ -v                   # services tests
 uv run ruff check src/ tests/                      # lint
 uv run ty check src/                               # type check
 ```
@@ -61,16 +68,16 @@ Recommended local gate:
 
 - `pytest.ini` sets `asyncio_mode = auto`.
 - Coverage is always on (`--cov=src`).
-- All three test suites use in-memory SQLite via an autouse `patch_get_engine`
-  fixture in each directory's `conftest.py`. The engine is disposed after each
-  test to avoid `ResourceWarning`.
+- All four test suites (cli, database, providers, services) use in-memory SQLite
+  via an autouse `patch_get_engine` fixture in each directory's `conftest.py`.
+  The engine is disposed after each test to avoid `ResourceWarning`.
 - Provider tests use lightweight mocks (`AsyncMock`, `MagicMock`,
   `PropertyMock`) and `SimpleNamespace` test payloads.
 - `tests/providers/conftest.py` patches `yapa.providers.base.get_logger`
   automatically to avoid writing real log files during tests.
 - `tests/cli/conftest.py` provides a `seeded_session` fixture (one user message
   and one assistant message) for session command tests.
-- Chat tests (`tests/cli/test_chat.py`) inject mock `Console`, `ProviderManager`,
+- Chat tests (`tests/cli/test_chat.py`) inject mock `Console`, `ConversationService`,
   and `Config` into `run_conversation()` via its keyword-only parameters to
   avoid interactive I/O and real provider calls.
 - CLI command routing is tested with `typer.testing.CliRunner`.
@@ -84,7 +91,7 @@ Provider-layer custom exceptions live in `src/yapa/providers/exceptions.py`:
 | `ModelsFetchError` | `InferenceProvider.get_models()` on provider model-list failures |
 | `ModelInvocationError` | `InferenceProvider.invoke_model()` on streaming invocation failures |
 
-`ProviderManager.get_provider_by_model()` catches `ModelsFetchError` per provider
+`ProviderService.get_models()` catches `ModelsFetchError` per provider
 and continues to the next provider.
 
 ## Database Schema
@@ -137,8 +144,9 @@ any provider without data loss.
   - `from yapa.config import Config, get_config`
   - `from yapa.logging import get_logger`
   - `from yapa.database import SessionRepository, SessionTable, MessageTable`
-  - `from yapa.providers import ProviderManager`
+  - `from yapa.providers import InferenceProvider, LMStudioIP, OpenRouterIP`
   - `from yapa.models import UserMessage, StreamDelta, InferenceParams`
+  - `from yapa.services import ConversationService, SessionService, ProviderService`
 - **Config file**: `~/.yapa/config.json`.
 - **Database file**: `~/.yapa/yapa.db` (derived from `Config.database_path`).
 - **Logs directory**: `~/.yapa/logs/{YYYY-MM-DD}/`.

@@ -10,7 +10,6 @@ __all__ = [
     "InferenceProviderError",
     "ModelInvocationError",
     "ModelsFetchError",
-    "ProviderManager",
     "LMStudioIP",
     "OpenRouterIP",
 ]
