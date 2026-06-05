@@ -1,13 +1,16 @@
 # Yet Another Personal Assistant (YAPA)
 
-YAPA is a terminal-first assistant with a Typer CLI and pluggable inference
-providers.
+YAPA is a terminal-first assistant with a Typer CLI, SQLite-backed session
+persistence, and pluggable inference providers.
 
 ## What it does today
 
-- Lists available models from configured providers
+- Lists available models from configured providers (grouped by vendor prefix)
+- Sets a default model via `--set` and scoped provider lookup via `--provider`
 - Runs an interactive chat loop with streaming responses
-- Supports provider selection by model ID via a provider manager
+- Supports slash commands for in-chat model/session switching and help
+- Persists conversations as sessions in a local SQLite database (`~/.yapa/yapa.db`)
+- Manages sessions (list, rename, delete, purge) via CLI commands
 
 Current providers:
 
@@ -21,22 +24,19 @@ Current providers:
 
    ```bash
    uv sync
-   uv sync --dev
    ```
 
-3. Configure environment variables (example):
+3. Configure environment variables (example, or add to a `.env` file):
 
    ```bash
    OPENROUTER_API_KEY=your_openrouter_api_key
-   OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
    LMSTUDIO_API_KEY=your_lmstudio_api_key_or_placeholder
-   LMSTUDIO_BASE_URL=http://localhost:1234/v1
-   YAPA_DEFAULT_MODEL=openrouter/free
-   YAPA_DATA_DIR=~/.yapa
+   YAPA_DEFAULT_MODEL_ID=openrouter/free
    YAPA_LOG_LEVEL=INFO
    ```
 
-Configuration can also be persisted to `~/.yapa/config.json`.
+Configuration can also be persisted to `~/.yapa/config.json`. Environment variables
+override file values.
 
 ## Usage
 
@@ -46,21 +46,51 @@ Run the CLI:
 uv run python -m yapa
 ```
 
-List models:
+List models (grouped by vendor):
 
 ```bash
 uv run python -m yapa models
-uv run python -m yapa models openrouter
+uv run python -m yapa models --provider openrouter
 ```
 
-Start interactive chat:
+Set the default model (validates the model exists):
 
 ```bash
-uv run python -m yapa invoke
-uv run python -m yapa invoke openrouter/free
+uv run python -m yapa models --set openrouter/free
+uv run python -m yapa models --provider openrouter --set openai/gpt-4o
 ```
 
-Type `exit` or `quit` to leave the chat loop.
+Start interactive chat (auto-creates a session):
+
+```bash
+uv run python -m yapa chat
+uv run python -m yapa chat --model openrouter/free
+```
+
+Resume a previous session:
+
+```bash
+uv run python -m yapa chat --session <session-id> --model openrouter/free
+```
+
+Manage sessions:
+
+```bash
+uv run python -m yapa sessions list
+uv run python -m yapa sessions rename <session-id> "New Title"
+uv run python -m yapa sessions delete <session-id>
+uv run python -m yapa sessions delete --purge       # delete empty sessions
+```
+
+Within a chat session the following slash commands are available:
+
+| Command | Description |
+|---|---|
+| `/help` | Show available commands |
+| `/exit` | Exit the chat session |
+| `/model <model-id>` | Switch to a different model |
+| `/session <session-id>` | Switch to a different session |
+| `/sessions` | List all sessions |
 
 ## Quality checks
 
@@ -80,9 +110,11 @@ uv run ruff check src/ tests/ && uv run ty check src/ && uv run pytest tests/ -v
 
 ```text
 src/yapa/
-  cli/         # Typer commands
-  models/      # Message and inference data models
-  providers/   # Provider abstraction + implementations
+  cli/         # Typer commands (app, chat, models, sessions)
+  database/    # SQLite models, engine, repositories (sqlmodel)
+  models/      # Message, inference, and session data models
+  providers/   # Provider abstraction + implementations (OpenRouter, LM Studio)
+  services/    # UI-agnostic business logic (conversation, session, provider services)
   config.py    # Config loading and persistence
   logging.py   # File and console logging helpers
 ```

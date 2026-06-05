@@ -1,13 +1,12 @@
 """Data models for messages in the chat application."""
 
 from abc import ABC, abstractmethod
-from time import time
+from datetime import datetime, timezone
 from typing import Annotated, Literal
 from uuid import uuid4
 
 from openai.types.chat import (
     ChatCompletionAssistantMessageParam,
-    ChatCompletionMessage,
     ChatCompletionMessageParam,
     ChatCompletionSystemMessageParam,
     ChatCompletionUserMessageParam,
@@ -23,14 +22,20 @@ class BaseMessage(ABC, BaseModel):
         id (str): Unique identifier for the message, generated as a UUID4 hex string.
         role (Literal["user", "assistant", "system"]): The role of the message sender.
         content (str): The content of the message.
-        timestamp (int): The timestamp of when the message was created, represented as
-            an integer (Unix time).
     """
 
     id: str = Field(default_factory=lambda: uuid4().hex)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        json_schema_extra={
+            "sa_column_kwargs": {"onupdate": lambda: datetime.now(timezone.utc)},
+        },
+    )
     role: Literal["user", "assistant", "system"]
     content: str
-    timestamp: int = Field(default_factory=lambda: int(time()))
 
     @abstractmethod
     def to_openai_format(self) -> ChatCompletionMessageParam:
@@ -65,18 +70,12 @@ class SystemMessage(BaseMessage):
 
     Attributes:
         role (Literal["system"]): The role of the message sender, set to "system".
-        name (str | None): An optional name for the system entity.
     """
 
     role: Literal["system"] = "system"
-    name: str | None = None
 
     def to_openai_format(self) -> ChatCompletionSystemMessageParam:
         """Convert the SystemMessage to OpenAI's ChatCompletionSystemMessageParam."""
-        if self.name:
-            return ChatCompletionSystemMessageParam(
-                role=self.role, content=self.content, name=self.name
-            )
         return ChatCompletionSystemMessageParam(role=self.role, content=self.content)
 
 
@@ -90,23 +89,13 @@ class AssistantMessage(BaseMessage):
     """
 
     role: Literal["assistant"] = "assistant"
-    model: str | None = None
+    model: str | None = Field(default=None)
 
     def to_openai_format(self) -> ChatCompletionAssistantMessageParam:
         """Convert the AssistantMessage to OpenAI's ChatCompletionAssistantMessageParam."""  # noqa: E501
         return ChatCompletionAssistantMessageParam(
             role=self.role,
             content=self.content,
-        )
-
-    @classmethod
-    def from_openai_format(
-        cls, message: ChatCompletionMessage, model_id: str
-    ) -> "AssistantMessage":
-        """Create an AssistantMessage instance from OpenAI's ChatCompletionMessage."""
-        return cls(
-            content=message.content or "",
-            model=model_id,
         )
 
 

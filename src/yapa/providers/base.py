@@ -32,6 +32,21 @@ class InferenceProvider(ABC):
         """Returns the unique identifier for this provider."""
         return self._identifier
 
+    def _filter_supported_models(self, models: list[ModelData]) -> list[ModelData]:
+        """
+        Filter the given list of models to those supported by this provider.
+
+        This is a placeholder implementation that returns all models. Subclasses
+        can override this method to implement provider-specific filtering logic.
+
+        Args:
+            models (list[ModelData]): The list of models to filter.
+
+        Returns:
+            list[ModelData]: The filtered list of models supported by this provider.
+        """
+        return models
+
     async def get_models(self) -> list[ModelData]:
         """
         Retrieve a list of available models for this provider.
@@ -45,9 +60,10 @@ class InferenceProvider(ABC):
         self._logger.info(f"Fetching models for provider '{self.id}'")
         try:
             models = await self._client.models.list()
-            return [
+            all_models = [
                 ModelData(id=model.id, provider_id=self.id) for model in models.data
             ]
+            return self._filter_supported_models(all_models)
         except Exception as e:
             self._logger.error(f"Failed to fetch models for provider '{self.id}': {e}")
             raise ModelsFetchError(

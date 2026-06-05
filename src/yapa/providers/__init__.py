@@ -2,12 +2,14 @@
 
 from .base import InferenceProvider
 from .exceptions import InferenceProviderError, ModelInvocationError, ModelsFetchError
-from .manager import ProviderManager
+from .lmstudio import LMStudioIP
+from .openrouter import OpenRouterIP
 
 __all__ = [
     "InferenceProvider",
     "InferenceProviderError",
     "ModelInvocationError",
     "ModelsFetchError",
-    "ProviderManager",
+    "LMStudioIP",
+    "OpenRouterIP",
 ]

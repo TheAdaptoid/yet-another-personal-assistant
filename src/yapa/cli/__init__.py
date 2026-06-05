@@ -1,5 +1,5 @@
 """Command-line interface for Yapa."""
 
-from .cli import cli
+from .app import cli
 
 __all__ = ["cli"]
