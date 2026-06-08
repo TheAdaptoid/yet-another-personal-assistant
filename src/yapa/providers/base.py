@@ -1,30 +1,89 @@
 """Inference provider base class and utilities."""
 
-from abc import ABC
-from typing import AsyncGenerator
-
-from openai import AsyncOpenAI
+from typing import AsyncGenerator, Protocol
 
 from yapa.logging import get_logger
-from yapa.models import InferenceParams, Message, ModelData, StreamDelta
+from yapa.models import InferenceParams, Message, ModelData, ModelType, StreamDelta
 
 from .exceptions import ModelInvocationError, ModelsFetchError
 
 
-class InferenceProvider(ABC):
+class ModelFetchProtocol(Protocol):
+    """Defines the protocol for fetching models from a provider."""
+
+    async def list_models(self, model_type: ModelType | None = None) -> list[ModelData]:
+        """
+        Retrieve a list of available models for this provider.
+
+        Args:
+            model_type (ModelType | None): Optional filter for the type of models
+                to list.
+
+        Returns:
+            list[ModelData]: A list of available models.
+        """
+        ...
+
+    async def get_model(self, model_id: str) -> ModelData:
+        """
+        Retrieve detailed information about a specific model.
+
+        Args:
+            model_id (str): The unique identifier of the model to retrieve.
+
+        Returns:
+            ModelData: Detailed information about the specified model.
+        """
+        ...
+
+
+class InferenceProtocol(Protocol):
+    """Defines the protocol for invoking a model."""
+
+    def invoke_llm(
+        self,
+        model_id: str,
+        messages: list[Message],
+        params: InferenceParams | None = None,
+    ) -> AsyncGenerator[StreamDelta, None]:
+        """
+        Invoke the model with the given list of messages.
+
+        Args:
+            model_id (str): The unique identifier of the model to invoke.
+            messages (list[Message]): The list of messages to send to the model.
+            params (InferenceParams | None): Optional inference parameters.
+
+        Returns:
+            AsyncGenerator[StreamDelta, None]: An asynchronous generator yielding the
+                model's responses.
+        """
+        ...
+
+
+class InferenceProvider:
     """Base class for inference providers."""
 
-    def __init__(self, identifier: str, name: str, client: AsyncOpenAI):
+    def __init__(
+        self,
+        identifier: str,
+        name: str,
+        model_fetcher: ModelFetchProtocol,
+        model_invoker: InferenceProtocol,
+    ) -> None:
         """
         Initialize a new inference provider.
 
         Args:
             identifier (str): The unique identifier for this provider.
             name (str): The human-readable name of this provider.
-            client (AsyncOpenAI): The OpenAI client to use for making requests.
+            model_fetcher (ModelFetchProtocol): The protocol for fetching models.
+            model_invoker (InferenceProtocol): The protocol for invoking models.
         """
         self._identifier = identifier
-        self._client = client
+        self._name = name
+        self._model_fetcher: ModelFetchProtocol = model_fetcher
+        self._model_invoker: InferenceProtocol = model_invoker
         self._logger = get_logger(f"inference_provider.{self._identifier}")
 
     @property
@@ -32,24 +91,18 @@ class InferenceProvider(ABC):
         """Returns the unique identifier for this provider."""
         return self._identifier
 
-    def _filter_supported_models(self, models: list[ModelData]) -> list[ModelData]:
-        """
-        Filter the given list of models to those supported by this provider.
+    @property
+    def name(self) -> str:
+        """Returns the human-readable name of this provider."""
+        return self._name
 
-        This is a placeholder implementation that returns all models. Subclasses
-        can override this method to implement provider-specific filtering logic.
-
-        Args:
-            models (list[ModelData]): The list of models to filter.
-
-        Returns:
-            list[ModelData]: The filtered list of models supported by this provider.
-        """
-        return models
-
-    async def get_models(self) -> list[ModelData]:
+    async def list_models(self, model_type: ModelType | None = None) -> list[ModelData]:
         """
         Retrieve a list of available models for this provider.
+
+        Args:
+            model_type (ModelType | None): Optional filter for the type of models
+                to list.
 
         Returns:
             list[ModelData]: A list of available models.
@@ -57,22 +110,40 @@ class InferenceProvider(ABC):
         Raises:
             ModelsFetchError: If fetching models from the provider fails.
         """
-        self._logger.info(f"Fetching models for provider '{self.id}'")
+        self._logger.info("Fetching models...")
         try:
-            models = await self._client.models.list()
-            all_models = [
-                ModelData(id=model.id, provider_id=self.id) for model in models.data
-            ]
-            return self._filter_supported_models(all_models)
+            return await self._model_fetcher.list_models(model_type=model_type)
         except Exception as e:
-            self._logger.error(f"Failed to fetch models for provider '{self.id}': {e}")
+            self._logger.error(f"Failed to fetch models: {e}")
             raise ModelsFetchError(
-                f"Failed to fetch models for provider '{self.id}': {e}"
+                f"Failed to fetch models from provider '{self.id}': {e}"
             ) from e
 
-    async def invoke_model(
+    async def get_model(self, model_id: str) -> ModelData:
+        """
+        Retrieve detailed information about a specific model.
+
+        Args:
+            model_id (str): The unique identifier of the model to retrieve.
+
+        Returns:
+            ModelData: Detailed information about the specified model.
+
+        Raises:
+            ModelsFetchError: If fetching the model from the provider fails.
+        """
+        self._logger.info(f"Fetching model '{model_id}'...")
+        try:
+            return await self._model_fetcher.get_model(model_id=model_id)
+        except Exception as e:
+            self._logger.error(f"Failed to fetch model '{model_id}': {e}")
+            raise ModelsFetchError(
+                f"Failed to fetch model '{model_id}' from provider '{self.id}': {e}"
+            ) from e
+
+    async def invoke_llm(
         self,
-        model: str,
+        model: ModelData,
         messages: list[Message],
         params: InferenceParams | None = None,
     ) -> AsyncGenerator[StreamDelta, None]:
@@ -80,7 +151,7 @@ class InferenceProvider(ABC):
         Invoke the specified model with the given messages and stream the response.
 
         Args:
-            model (str): The model to invoke.
+            model (ModelData): The model to invoke.
             messages (list[Message]): A list of messages to send to the model.
             params (InferenceParams | None): Optional inference parameters.
 
@@ -90,30 +161,24 @@ class InferenceProvider(ABC):
         Raises:
             ModelInvocationError: If model invocation fails.
         """
-        self._logger.info(f"Invoking model '{model}' from provider '{self.id}'.")
+        if model.type != ModelType.LLM:
+            raise ModelInvocationError(f"Model '{model.id}' is not an LLM.")
+
+        self._logger.info(f"Invoking model '{model.id}'.")
         try:
-            async for chunk in await self._client.chat.completions.create(
-                model=model,
-                messages=[message.to_openai_format() for message in messages],
-                temperature=params.temperature if params else None,
-                max_tokens=params.max_tokens if params else None,
-                top_p=params.top_p if params else None,
-                stream=True,
+            async for delta in self._model_invoker.invoke_llm(
+                model_id=model.id,
+                messages=messages,
+                params=params,
             ):
-                content: str | None = chunk.choices[0].delta.content
-                reasoning_content: str | None = getattr(
-                    chunk.choices[0].delta,
-                    "reasoning_content",
-                    getattr(chunk.choices[0].delta, "reasoning", None),
-                )
-
-                yield StreamDelta(
-                    content=content, reasoning_content=reasoning_content, done=False
-                )
-
-            yield StreamDelta(content=None, reasoning_content=None, done=True)
+                yield delta
         except Exception as e:
-            self._logger.error(f"Streaming model invocation failed for '{model}': {e}")
+            self._logger.error(
+                f"Streaming model invocation failed for '{model.id}': {e}"
+            )
             raise ModelInvocationError(
-                f"Streaming model invocation failed for '{model}': {e}"
+                f"Streaming model invocation from provider '{self.id}' "
+                f"failed for '{model.id}': {e}"
             ) from e
+        else:
+            yield StreamDelta(content=None, reasoning_content=None, done=True)

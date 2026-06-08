@@ -1,6 +1,6 @@
 """Shared data models for the Yapa application."""
 
-from .inference import InferenceParams, ModelData, StreamDelta
+from .inference import InferenceParams, ModelData, ModelType, StreamDelta
 from .message import (
     AssistantMessage,
     BaseMessage,
@@ -20,4 +20,5 @@ __all__ = [
     "ModelData",
     "StreamDelta",
     "SessionSummary",
+    "ModelType",
 ]
