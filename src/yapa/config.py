@@ -13,12 +13,12 @@ load_dotenv()
 DEFAULT_DATA_DIR = Path.home() / ".yapa"
 DEFAULT_CONFIG_PATH = DEFAULT_DATA_DIR / "config.json"
 DEFAULT_DATABASE_PATH = DEFAULT_DATA_DIR / "yapa.db"
-DEFAULT_MODEL_ID = "openrouter/free"
-DEFAULT_PROVIDER_ID = "openrouter"
+DEFAULT_MODEL = "openrouter:openrouter/free"
 DEFAULT_LOG_LEVEL = "INFO"
 
 DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_LMSTUDIO_BASE_URL = "http://localhost:1234/v1"
+DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434/v1"
 
 UNSET = "NOT_SET"
 
@@ -29,9 +29,17 @@ class Config(BaseModel):
 
     Attributes:
         openrouter_api_key (str | None): OpenRouter API key for LLM calls.
+        openrouter_base_url (str): Base URL for OpenRouter API.
+
+        lmstudio_api_key (str | None): LM Studio API key for LLM calls.
         lmstudio_base_url (str): Base URL for LM Studio API.
-        default_model_id (str): Model identifier to use by default.
-        default_provider_id (str): Provider of the default model.
+
+        ollama_api_key (str | None): Ollama API key for LLM calls.
+        ollama_base_url (str): Base URL for Ollama API.
+
+        default_model (str): Full model identifier (provider_id:model_id)
+            to use by default.
+
         data_dir (Path): Directory for YAPA data storage (sessions, tasks, logs).
         log_level (str): Logging level (DEBUG, INFO, WARNING, ERROR).
     """
@@ -40,8 +48,9 @@ class Config(BaseModel):
     openrouter_base_url: str = DEFAULT_OPENROUTER_BASE_URL
     lmstudio_api_key: str = UNSET
     lmstudio_base_url: str = DEFAULT_LMSTUDIO_BASE_URL
-    default_model_id: str = DEFAULT_MODEL_ID
-    default_provider_id: str = DEFAULT_PROVIDER_ID
+    ollama_api_key: str = UNSET
+    ollama_base_url: str = DEFAULT_OLLAMA_BASE_URL
+    default_model: str = DEFAULT_MODEL
     data_dir: Path = Field(default_factory=lambda: DEFAULT_DATA_DIR)
     database_path: Path = Field(default_factory=lambda: DEFAULT_DATABASE_PATH)
     log_level: str = Field(
@@ -75,8 +84,9 @@ def load_config(path: Path | None = None) -> Config:
         "openrouter_base_url": os.environ.get("OPENROUTER_BASE_URL"),
         "lmstudio_api_key": os.environ.get("LMSTUDIO_API_KEY"),
         "lmstudio_base_url": os.environ.get("LMSTUDIO_BASE_URL"),
-        "default_model_id": os.environ.get("YAPA_DEFAULT_MODEL_ID"),
-        "default_provider_id": os.environ.get("YAPA_DEFAULT_PROVIDER_ID"),
+        "ollama_api_key": os.environ.get("OLLAMA_API_KEY"),
+        "ollama_base_url": os.environ.get("OLLAMA_BASE_URL"),
+        "default_model": os.environ.get("YAPA_DEFAULT_MODEL"),
         "data_dir": os.environ.get("YAPA_DATA_DIR"),
         "database_path": os.environ.get("YAPA_DATABASE_PATH"),
         "log_level": os.environ.get("YAPA_LOG_LEVEL"),

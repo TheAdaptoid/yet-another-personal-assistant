@@ -2,23 +2,14 @@
 
 import json
 
-from yapa.config import (
-    DEFAULT_MODEL_ID,
-    DEFAULT_PROVIDER_ID,
-    Config,
-    load_config,
-    save_config,
-)
+from yapa.config import DEFAULT_MODEL, Config, load_config, save_config
 
 
 class TestConfigDefaults:
     """Default values for Config fields."""
 
-    def test_default_model_id(self):
-        assert Config().default_model_id == DEFAULT_MODEL_ID
-
-    def test_default_provider_id(self):
-        assert Config().default_provider_id == DEFAULT_PROVIDER_ID
+    def test_default_model(self):
+        assert Config().default_model == DEFAULT_MODEL
 
 
 class TestLoadConfig:
@@ -26,102 +17,69 @@ class TestLoadConfig:
 
     def test_load_from_json(self, tmp_path):
         path = tmp_path / "config.json"
+        path.write_text(json.dumps({"default_model": "custom:custom/model"}))
+        cfg = load_config(path=path)
+        assert cfg.default_model == "custom:custom/model"
+
+    def test_old_two_field_strings_ignored(self, tmp_path):
+        """Old default_model_id/default_provider_id keys are silently ignored."""
+        path = tmp_path / "config.json"
         path.write_text(
             json.dumps(
                 {
-                    "default_model_id": "custom/model",
-                    "default_provider_id": "custom",
+                    "default_model_id": "old/model",
+                    "default_provider_id": "old",
                 }
             )
         )
         cfg = load_config(path=path)
-        assert cfg.default_model_id == "custom/model"
-        assert cfg.default_provider_id == "custom"
-
-    def test_old_string_field_ignored(self, tmp_path):
-        """A config with the old 'default_model' string uses defaults."""
-        path = tmp_path / "config.json"
-        path.write_text(json.dumps({"default_model": "openrouter/free"}))
-        cfg = load_config(path=path)
-        assert cfg.default_model_id == DEFAULT_MODEL_ID
-        assert cfg.default_provider_id == DEFAULT_PROVIDER_ID
+        assert cfg.default_model == DEFAULT_MODEL
 
     def test_missing_file_uses_defaults(self, tmp_path):
         path = tmp_path / "nonexistent.json"
         cfg = load_config(path=path)
-        assert cfg.default_model_id == DEFAULT_MODEL_ID
-        assert cfg.default_provider_id == DEFAULT_PROVIDER_ID
+        assert cfg.default_model == DEFAULT_MODEL
 
     def test_empty_json_uses_defaults(self, tmp_path):
         path = tmp_path / "config.json"
         path.write_text("{}")
         cfg = load_config(path=path)
-        assert cfg.default_model_id == DEFAULT_MODEL_ID
-        assert cfg.default_provider_id == DEFAULT_PROVIDER_ID
+        assert cfg.default_model == DEFAULT_MODEL
 
     @staticmethod
     def _write_json(path, data):
         path.write_text(json.dumps(data))
 
-    def test_env_override_model_id(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("YAPA_DEFAULT_MODEL_ID", "env/model")
+    def test_env_override(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("YAPA_DEFAULT_MODEL", "env:env/model")
         path = tmp_path / "config.json"
-        self._write_json(
-            path,
-            {"default_model_id": "file/model", "default_provider_id": "file"},
-        )
+        self._write_json(path, {"default_model": "file:file/model"})
         cfg = load_config(path=path)
-        assert cfg.default_model_id == "env/model"
-        assert cfg.default_provider_id == "file"
+        assert cfg.default_model == "env:env/model"
 
-    def test_env_override_provider_id(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("YAPA_DEFAULT_PROVIDER_ID", "env-provider")
-        path = tmp_path / "config.json"
-        self._write_json(
-            path,
-            {"default_model_id": "file/model", "default_provider_id": "file"},
-        )
+    def test_env_override_missing_file(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("YAPA_DEFAULT_MODEL", "env:env/model")
+        path = tmp_path / "nonexistent.json"
         cfg = load_config(path=path)
-        assert cfg.default_model_id == "file/model"
-        assert cfg.default_provider_id == "env-provider"
-
-    def test_env_override_both(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("YAPA_DEFAULT_MODEL_ID", "env/model")
-        monkeypatch.setenv("YAPA_DEFAULT_PROVIDER_ID", "env")
-        path = tmp_path / "config.json"
-        self._write_json(
-            path,
-            {"default_model_id": "file/model", "default_provider_id": "file"},
-        )
-        cfg = load_config(path=path)
-        assert cfg.default_model_id == "env/model"
-        assert cfg.default_provider_id == "env"
+        assert cfg.default_model == "env:env/model"
 
 
 class TestSaveConfig:
     """Saving config to disk."""
 
-    def test_saves_model_fields(self, tmp_path):
+    def test_saves_default_model(self, tmp_path):
         path = tmp_path / "config.json"
-        cfg = Config(
-            default_model_id="saved/model",
-            default_provider_id="saved",
-        )
+        cfg = Config(default_model="saved:saved/model")
         save_config(cfg, path=path)
         data = json.loads(path.read_text())
-        assert data["default_model_id"] == "saved/model"
-        assert data["default_provider_id"] == "saved"
+        assert data["default_model"] == "saved:saved/model"
 
     def test_roundtrip(self, tmp_path):
         path = tmp_path / "config.json"
-        original = Config(
-            default_model_id="roundtrip/model",
-            default_provider_id="roundtrip",
-        )
+        original = Config(default_model="rt:rt/model")
         save_config(original, path=path)
         loaded = load_config(path=path)
-        assert loaded.default_model_id == "roundtrip/model"
-        assert loaded.default_provider_id == "roundtrip"
+        assert loaded.default_model == "rt:rt/model"
 
     def test_data_dir_created(self, tmp_path):
         nested = tmp_path / "a" / "b"

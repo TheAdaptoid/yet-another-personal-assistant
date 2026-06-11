@@ -1,16 +1,10 @@
 """Data models for messages in the chat application."""
 
-from abc import ABC, abstractmethod
+from abc import ABC
 from datetime import datetime, timezone
 from typing import Annotated, Literal
 from uuid import uuid4
 
-from openai.types.chat import (
-    ChatCompletionAssistantMessageParam,
-    ChatCompletionMessageParam,
-    ChatCompletionSystemMessageParam,
-    ChatCompletionUserMessageParam,
-)
 from pydantic import BaseModel, Field
 
 
@@ -37,17 +31,6 @@ class BaseMessage(ABC, BaseModel):
     role: Literal["user", "assistant", "system"]
     content: str
 
-    @abstractmethod
-    def to_openai_format(self) -> ChatCompletionMessageParam:
-        """
-        Convert the message to a format compatible with OpenAI's API.
-
-        Returns:
-            ChatCompletionMessageParam: A dictionary with keys "role", "content", and
-            other optional fields depending on the message type.
-        """
-        pass
-
 
 class UserMessage(BaseMessage):
     """
@@ -59,10 +42,6 @@ class UserMessage(BaseMessage):
 
     role: Literal["user"] = "user"
 
-    def to_openai_format(self) -> ChatCompletionUserMessageParam:
-        """Convert the UserMessage to OpenAI's ChatCompletionUserMessageParam."""
-        return ChatCompletionUserMessageParam(role=self.role, content=self.content)
-
 
 class SystemMessage(BaseMessage):
     """
@@ -73,10 +52,6 @@ class SystemMessage(BaseMessage):
     """
 
     role: Literal["system"] = "system"
-
-    def to_openai_format(self) -> ChatCompletionSystemMessageParam:
-        """Convert the SystemMessage to OpenAI's ChatCompletionSystemMessageParam."""
-        return ChatCompletionSystemMessageParam(role=self.role, content=self.content)
 
 
 class AssistantMessage(BaseMessage):
@@ -90,13 +65,6 @@ class AssistantMessage(BaseMessage):
 
     role: Literal["assistant"] = "assistant"
     model: str | None = Field(default=None)
-
-    def to_openai_format(self) -> ChatCompletionAssistantMessageParam:
-        """Convert the AssistantMessage to OpenAI's ChatCompletionAssistantMessageParam."""  # noqa: E501
-        return ChatCompletionAssistantMessageParam(
-            role=self.role,
-            content=self.content,
-        )
 
 
 Message = Annotated[

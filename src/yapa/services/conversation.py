@@ -10,12 +10,19 @@ from yapa.models import (
     ModelData,
     SessionSummary,
     StreamDelta,
+    SystemMessage,
     UserMessage,
 )
 from yapa.providers.exceptions import ModelInvocationError
 
 from .exceptions import ConversationError
 from .provider import ProviderService
+
+TITLE_SYSTEM_PROMPT = (
+    "Generate a concise title (max 5 words) for this conversation "
+    "based on the user's first message. Respond with ONLY the title, "
+    "no punctuation or quotes."
+)
 
 
 class ConversationService:
@@ -64,12 +71,12 @@ class ConversationService:
         """Set the model to use for this conversation."""
         self._model = model
 
-    async def resolve_model(self, model_id: str) -> ModelData:
+    async def resolve_model(self, model_full_id: str) -> ModelData:
         """
-        Resolve a model ID string to a ModelData with the correct provider.
+        Resolve a model full ID string to a ModelData with the correct provider.
 
         Args:
-            model_id: The model identifier to resolve.
+            model_full_id: The full model identifier to resolve.
 
         Returns:
             ModelData with the correct provider_id.
@@ -77,8 +84,7 @@ class ConversationService:
         Raises:
             ValueError: If no provider serves the given model ID.
         """
-        provider = await self._ps.get_provider_by_model_id(model_id)
-        return ModelData(id=model_id, provider_id=provider.id)
+        return await self._ps.get_model(model_full_id)
 
     def _save_message(self, message: Message) -> None:
         """Persist a message to the current session."""
@@ -87,7 +93,7 @@ class ConversationService:
         self._messages.append(message)
         self._session_repo.add_message(self._session_id, message)
 
-    def start(
+    async def start(
         self,
         session_id: str | None = None,
         model: ModelData | None = None,
@@ -117,10 +123,7 @@ class ConversationService:
             if model:
                 self._model = model
             else:
-                self._model = ModelData(
-                    id=self._cfg.default_model_id,
-                    provider_id=self._cfg.default_provider_id,
-                )
+                self._model = await self._ps.get_model(self._cfg.default_model)
 
         return session.to_summary()
 
@@ -145,6 +148,46 @@ class ConversationService:
 
     async def close(self) -> None:
         """Clean up resources."""
+        return None
+
+    async def generate_title(self, user_prompt: str) -> str | None:
+        """
+        Generate a conversation title from a user message using the LLM.
+
+        Args:
+            user_prompt: The user's message to base the title on.
+
+        Returns:
+            The generated title string, or None if generation failed.
+        """
+        if not self._model:
+            return None
+        provider = self._ps.get_provider_by_model(self._model)
+        system_msg = SystemMessage(content=TITLE_SYSTEM_PROMPT)
+        user_msg = UserMessage(content=user_prompt)
+        buffer = ""
+        try:
+            async for delta in provider.invoke_llm(
+                model=self._model,
+                messages=[system_msg, user_msg],
+            ):
+                if delta.content:
+                    buffer += delta.content
+        except ModelInvocationError:
+            return None
+        title = buffer.strip().strip('"').strip("'").strip()
+        return title[:60] if title else None
+
+    async def auto_title(self) -> str | None:
+        """Auto-title the current session based on the first user message."""
+        if not self._session_id:
+            return None
+        for msg in self._messages:
+            if msg.role == "user":
+                title = await self.generate_title(msg.content)
+                if title:
+                    self._session_repo.rename(self._session_id, title)
+                return title
         return None
 
     async def stream_response(
@@ -181,8 +224,8 @@ class ConversationService:
         buffer = ""
 
         try:
-            async for delta in provider.invoke_model(
-                model=self._model.id,
+            async for delta in provider.invoke_llm(
+                model=self._model,
                 messages=[*self._messages, user_msg],
             ):
                 if delta.content:
