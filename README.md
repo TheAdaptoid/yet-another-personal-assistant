@@ -5,17 +5,20 @@ persistence, and pluggable inference providers.
 
 ## What it does today
 
-- Lists available models from configured providers (grouped by vendor prefix)
+- Lists available models from configured providers (grouped by vendor prefix, filtered to LLMs only)
 - Sets a default model via `--set` and scoped provider lookup via `--provider`
 - Runs an interactive chat loop with streaming responses
+- Auto-titles new sessions based on the first user message using the default LLM
 - Supports slash commands for in-chat model/session switching and help
 - Persists conversations as sessions in a local SQLite database (`~/.yapa/yapa.db`)
-- Manages sessions (list, rename, delete, purge) via CLI commands
+- Manages sessions (list, rename with manual or auto-generated title, delete, purge) via CLI commands
+- Resumes the most recent session via `--continue`
 
 Current providers:
 
 - `openrouter`
 - `lmstudio`
+- `ollama`
 
 ## Installation
 
@@ -55,10 +58,11 @@ uv tool upgrade yapa
 3. Configure environment variables (example, or add to a `.env` file):
 
    ```bash
-   OPENROUTER_API_KEY=your_openrouter_api_key
-   LMSTUDIO_API_KEY=your_lmstudio_api_key_or_placeholder
-   YAPA_DEFAULT_MODEL_ID=openrouter/free
-   YAPA_LOG_LEVEL=INFO
+    OPENROUTER_API_KEY=your_openrouter_api_key
+    LMSTUDIO_API_KEY=your_lmstudio_api_key_or_placeholder
+    OLLAMA_API_KEY=your_ollama_api_key_or_placeholder
+    YAPA_DEFAULT_MODEL=openrouter:openrouter/free
+    YAPA_LOG_LEVEL=INFO
    ```
 
 Configuration can also be persisted to `~/.yapa/config.json`. Environment variables
@@ -99,6 +103,12 @@ yapa chat
 yapa chat --model openrouter/free
 ```
 
+Continue the most recent session:
+
+```bash
+yapa chat --continue
+```
+
 Resume a previous session:
 
 ```bash
@@ -110,8 +120,9 @@ Manage sessions:
 ```bash
 yapa sessions list
 yapa sessions rename <session-id> "New Title"
+yapa sessions rename <session-id> --auto    # generate title via LLM
 yapa sessions delete <session-id>
-yapa sessions delete --purge       # delete empty sessions
+yapa sessions delete --purge                # delete empty sessions
 ```
 
 > **Note:** All examples below use the installed `yapa` command. Replace with
@@ -132,7 +143,7 @@ Within a chat session the following slash commands are available:
 ```bash
 uv run ruff check src/ tests/
 uv run ty check src/
-uv run pytest tests/ -v
+uv run pytest tests/ -v  # enforces ≥80% coverage
 ```
 
 Recommended local gate:
