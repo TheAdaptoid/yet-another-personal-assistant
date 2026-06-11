@@ -201,6 +201,7 @@ async def run_conversation(
         svc.model = model
 
     info = await svc.start(session_id=session_id)
+    is_new = info.message_count == 0
     _start_session(svc, info, session_id, con)
 
     try:
@@ -242,6 +243,12 @@ async def run_conversation(
                 continue
 
             await _stream_response(svc, con, prompt)
+
+            if is_new:
+                title = await svc.auto_title()
+                if title:
+                    con.print(f"[dim]Session titled: '{title}'[/dim]")
+                is_new = False
     finally:
         save_config(cfg)
         await svc.close()

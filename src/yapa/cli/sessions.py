@@ -22,11 +22,12 @@ def _get_session_service() -> SessionService:
 
 def _format_time(summary: SessionSummary) -> str:
     """Format the time string based on recency."""
-    if summary.updated_at.date() == date.today():
-        return summary.updated_at.strftime("%H:%M")
-    if summary.updated_at.date() == date.today() - timedelta(days=1):
-        return summary.updated_at.strftime("%H:%M")
-    return summary.updated_at.strftime("%b %d")
+    local = summary.updated_at.astimezone()
+    if local.date() == date.today():
+        return local.strftime("%H:%M")
+    if local.date() == date.today() - timedelta(days=1):
+        return local.strftime("%H:%M")
+    return local.strftime("%b %d")
 
 
 def _truncate(text: str, max_len: int = 28) -> str:
@@ -45,7 +46,7 @@ def _group_by_date(
         "Older": [],
     }
     for s in summaries:
-        s_date = s.updated_at.date()
+        s_date = s.updated_at.astimezone().date()
         if s_date == today:
             groups["Today"].append(s)
         elif s_date == today - timedelta(days=1):
@@ -135,3 +136,23 @@ def purge_sessions() -> None:
 
     _get_session_service().purge()
     console.print(f"[green]Purged {len(to_purge)} session(s).[/green]")
+
+
+async def _auto_rename_session(session_id: str) -> str | None:
+    """Auto-rename a session using LLM title generation."""
+    from yapa.services import ConversationService
+
+    try:
+        svc = ConversationService()
+        await svc.start(session_id=session_id)
+    except ValueError:
+        return None
+
+    for msg in svc.messages:
+        if msg.role == "user":
+            title = await svc.generate_title(msg.content)
+            if title:
+                _get_session_service().rename(session_id, title)
+                return title
+            return None
+    return None

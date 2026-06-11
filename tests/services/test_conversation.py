@@ -1,10 +1,17 @@
 """Tests for ConversationService."""
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from yapa.models import AssistantMessage, ModelData, ModelType, StreamDelta, UserMessage
+from yapa.models import (
+    AssistantMessage,
+    ModelData,
+    ModelType,
+    StreamDelta,
+    SystemMessage,
+    UserMessage,
+)
 from yapa.providers.exceptions import ModelInvocationError
 from yapa.services import ConversationError, ConversationService
 
@@ -314,3 +321,252 @@ class TestModel:
         model = ModelData(id="custom/model", provider_id="custom", type=ModelType.LLM)
         service.model = model
         assert service.model == model
+
+
+class TestGenerateTitle:
+    """Tests for ConversationService.generate_title()."""
+
+    async def test_generates_title(self, mock_provider_service, repo, config):
+        provider = mock_provider_service.get_provider_by_model.return_value
+
+        async def _response(model, messages, params=None):
+            yield StreamDelta(content="My Title", reasoning_content=None, done=False)
+            yield StreamDelta(content=None, reasoning_content=None, done=True)
+
+        provider.invoke_llm = _response
+
+        service = ConversationService(
+            provider_service=mock_provider_service, config=config, session_repo=repo
+        )
+        service.model = ModelData(
+            id="test-model", provider_id="test", type=ModelType.LLM
+        )
+        await service.start()
+
+        title = await service.generate_title("Hello world")
+        assert title == "My Title"
+
+    async def test_strips_quotes(self, mock_provider_service, repo, config):
+        provider = mock_provider_service.get_provider_by_model.return_value
+
+        async def _response(model, messages, params=None):
+            yield StreamDelta(content='"My Title"', reasoning_content=None, done=False)
+            yield StreamDelta(content=None, reasoning_content=None, done=True)
+
+        provider.invoke_llm = _response
+
+        service = ConversationService(
+            provider_service=mock_provider_service, config=config, session_repo=repo
+        )
+        service.model = ModelData(
+            id="test-model", provider_id="test", type=ModelType.LLM
+        )
+        await service.start()
+
+        title = await service.generate_title("Hello world")
+        assert title == "My Title"
+
+    async def test_truncates_long_title(self, mock_provider_service, repo, config):
+        long_title = "x" * 100
+        provider = mock_provider_service.get_provider_by_model.return_value
+
+        async def _response(model, messages, params=None):
+            yield StreamDelta(content=long_title, reasoning_content=None, done=False)
+            yield StreamDelta(content=None, reasoning_content=None, done=True)
+
+        provider.invoke_llm = _response
+
+        service = ConversationService(
+            provider_service=mock_provider_service, config=config, session_repo=repo
+        )
+        service.model = ModelData(
+            id="test-model", provider_id="test", type=ModelType.LLM
+        )
+        await service.start()
+
+        title = await service.generate_title("Hello world")
+        assert title == "x" * 60
+
+    async def test_returns_none_on_exception(self, mock_provider_service, repo, config):
+        provider = mock_provider_service.get_provider_by_model.return_value
+
+        async def _fail(model, messages, params=None):
+            raise ModelInvocationError("API error")
+            yield  # pragma: no cover
+
+        provider.invoke_llm = _fail
+
+        service = ConversationService(
+            provider_service=mock_provider_service, config=config, session_repo=repo
+        )
+        service.model = ModelData(
+            id="test-model", provider_id="test", type=ModelType.LLM
+        )
+        await service.start()
+
+        title = await service.generate_title("Hello world")
+        assert title is None
+
+    async def test_returns_none_when_model_not_set(
+        self, mock_provider_service, repo, config
+    ):
+        service = ConversationService(
+            provider_service=mock_provider_service, config=config, session_repo=repo
+        )
+        title = await service.generate_title("Hello world")
+        assert title is None
+
+    async def test_returns_none_on_empty_response(
+        self, mock_provider_service, repo, config
+    ):
+        provider = mock_provider_service.get_provider_by_model.return_value
+
+        async def _empty(model, messages, params=None):
+            yield StreamDelta(content=None, reasoning_content=None, done=True)
+
+        provider.invoke_llm = _empty
+
+        service = ConversationService(
+            provider_service=mock_provider_service, config=config, session_repo=repo
+        )
+        service.model = ModelData(
+            id="test-model", provider_id="test", type=ModelType.LLM
+        )
+        await service.start()
+
+        title = await service.generate_title("Hello world")
+        assert title is None
+
+    async def test_passes_system_prompt_with_user_message(
+        self, mock_provider_service, repo, config
+    ):
+        provider = mock_provider_service.get_provider_by_model.return_value
+        captured_messages = None
+
+        async def _capture(model, messages, params=None):
+            nonlocal captured_messages
+            captured_messages = messages
+            yield StreamDelta(content="Title", reasoning_content=None, done=False)
+            yield StreamDelta(content=None, reasoning_content=None, done=True)
+
+        provider.invoke_llm = _capture
+
+        service = ConversationService(
+            provider_service=mock_provider_service, config=config, session_repo=repo
+        )
+        service.model = ModelData(
+            id="test-model", provider_id="test", type=ModelType.LLM
+        )
+        await service.start()
+
+        await service.generate_title("Hello world")
+        assert captured_messages is not None
+        assert len(captured_messages) == 2
+        assert isinstance(captured_messages[0], SystemMessage)
+        assert captured_messages[1].content == "Hello world"
+        assert captured_messages[1].role == "user"
+
+
+class TestAutoTitle:
+    """Tests for ConversationService.auto_title()."""
+
+    async def test_auto_titles_first_user_message(
+        self, mock_provider_service, repo, config
+    ):
+        service = ConversationService(
+            provider_service=mock_provider_service, config=config, session_repo=repo
+        )
+        service.model = ModelData(
+            id="test-model", provider_id="test", type=ModelType.LLM
+        )
+        await service.start()
+        service._messages = [UserMessage(content="Hello world")]
+
+        async def _response(model, messages, params=None):
+            yield StreamDelta(content="My Title", reasoning_content=None, done=False)
+            yield StreamDelta(content=None, reasoning_content=None, done=True)
+
+        provider = mock_provider_service.get_provider_by_model.return_value
+        provider.invoke_llm = _response
+
+        with patch.object(service._session_repo, "rename") as mock_rename:
+            title = await service.auto_title()
+
+        assert title == "My Title"
+        mock_rename.assert_called_once_with(service.session_id, "My Title")
+
+    async def test_auto_title_no_user_message(
+        self, mock_provider_service, repo, config
+    ):
+        service = ConversationService(
+            provider_service=mock_provider_service, config=config, session_repo=repo
+        )
+        service.model = ModelData(
+            id="test-model", provider_id="test", type=ModelType.LLM
+        )
+        await service.start()
+
+        title = await service.auto_title()
+        assert title is None
+
+    async def test_auto_title_no_session(
+        self, mock_provider_service, repo, config
+    ):
+        service = ConversationService(
+            provider_service=mock_provider_service, config=config, session_repo=repo
+        )
+        title = await service.auto_title()
+        assert title is None
+
+    async def test_auto_title_skips_non_user_roles(
+        self, mock_provider_service, repo, config
+    ):
+        service = ConversationService(
+            provider_service=mock_provider_service, config=config, session_repo=repo
+        )
+        service.model = ModelData(
+            id="test-model", provider_id="test", type=ModelType.LLM
+        )
+        await service.start()
+        service._messages = [
+            SystemMessage(content="system note"),
+            UserMessage(content="Hello world"),
+        ]
+
+        async def _response(model, messages, params=None):
+            yield StreamDelta(content="My Title", reasoning_content=None, done=False)
+            yield StreamDelta(content=None, reasoning_content=None, done=True)
+
+        provider = mock_provider_service.get_provider_by_model.return_value
+        provider.invoke_llm = _response
+
+        with patch.object(service._session_repo, "rename") as mock_rename:
+            title = await service.auto_title()
+
+        assert title == "My Title"
+        mock_rename.assert_called_once_with(service.session_id, "My Title")
+
+    async def test_auto_title_returns_none_on_empty(
+        self, mock_provider_service, repo, config
+    ):
+        service = ConversationService(
+            provider_service=mock_provider_service, config=config, session_repo=repo
+        )
+        service.model = ModelData(
+            id="test-model", provider_id="test", type=ModelType.LLM
+        )
+        await service.start()
+        service._messages = [UserMessage(content="Hello world")]
+
+        provider = mock_provider_service.get_provider_by_model.return_value
+
+        async def _empty(model, messages, params=None):
+            yield StreamDelta(content=None, reasoning_content=None, done=True)
+
+        provider.invoke_llm = _empty
+
+        with patch.object(service._session_repo, "rename") as mock_rename:
+            title = await service.auto_title()
+
+        assert title is None
+        mock_rename.assert_not_called()

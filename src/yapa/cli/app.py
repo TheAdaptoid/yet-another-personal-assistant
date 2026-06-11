@@ -3,11 +3,17 @@
 import asyncio
 
 from rich.console import Console
-from typer import Argument, Option, Typer
+from typer import Argument, Exit, Option, Typer
 
 from .chat import run_conversation
 from .models import list_models, set_default_model
-from .sessions import delete_session, list_sessions, purge_sessions, rename_session
+from .sessions import (
+    _auto_rename_session,
+    delete_session,
+    list_sessions,
+    purge_sessions,
+    rename_session,
+)
 
 cli = Typer()
 sessions_app = Typer()
@@ -37,10 +43,20 @@ def models(
 def chat(
     model: str | None = None,
     session: str | None = Option(None, "--session", "-s", help="Session ID to resume"),
+    continue_last: bool = Option(
+        False, "--continue", "-c", help="Continue the most recent session"
+    ),
 ) -> None:
     """Start an interactive chat session."""
     try:
-        asyncio.run(run_conversation(model_id=model, session_id=session))
+        session_id = session
+        if continue_last:
+            from yapa.services import SessionService
+
+            sessions = SessionService().list_all()
+            if sessions:
+                session_id = sessions[0].id
+        asyncio.run(run_conversation(model_id=model, session_id=session_id))
     except KeyboardInterrupt:
         pass
 
@@ -54,10 +70,30 @@ def sessions_list() -> None:
 @sessions_app.command(name="rename")
 def sessions_rename(
     session_id: str = Argument(..., help="Session ID to rename"),
-    title: str = Argument(..., help="New title for the session"),
+    title: str | None = Argument(None, help="New title for the session"),
+    auto: bool = Option(
+        False,
+        "--auto",
+        "-a",
+        help="Auto-generate title from conversation",
+    ),
 ) -> None:
     """Rename a conversation session."""
-    rename_session(session_id, title)
+    if auto:
+        t = asyncio.run(_auto_rename_session(session_id))
+        if t:
+            Console().print(
+                f"[dim]Renamed [blue]{session_id}[/blue] to '{t}'[/dim]"
+            )
+        else:
+            Console().print(
+                "[dim]\u2717 [yellow]Could not auto-generate title[/yellow][/dim]"
+            )
+    elif title:
+        rename_session(session_id, title)
+    else:
+        Console().print("[red]Error:[/red] Provide a title or use --auto")
+        raise Exit(1)
 
 
 @sessions_app.command(name="delete")

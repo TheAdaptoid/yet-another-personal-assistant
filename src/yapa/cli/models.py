@@ -4,7 +4,7 @@ from rich.console import Console
 from rich.tree import Tree
 
 from yapa.config import get_config, save_config
-from yapa.models import ModelData
+from yapa.models import ModelData, ModelType
 from yapa.services import ProviderService
 
 _provider_service: ProviderService | None = None
@@ -88,10 +88,12 @@ async def list_models(provider: str | None = None) -> None:
     """List available models."""
     svc = _get_provider_service()
     if provider:
-        models = (await svc.list_models(provider)).get(provider, [])
+        models = (
+            await svc.list_models(provider_id=provider, model_type=ModelType.LLM)
+        ).get(provider, [])
         display_models(provider, models)
     else:
         Console().print("Available providers and their models:")
-        all_models = await svc.list_models()
+        all_models = await svc.list_models(model_type=ModelType.LLM)
         for provider_id, models in all_models.items():
             display_models(provider_id, models)

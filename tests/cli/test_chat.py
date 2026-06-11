@@ -54,6 +54,7 @@ class TestRunConversation:
 
         svc.stream_response = _stream
         svc.close = AsyncMock()
+        svc.auto_title = AsyncMock(return_value=None)
         svc.resolve_model = AsyncMock(
             return_value=ModelData(
                 id="test-model", provider_id="test", type=ModelType.LLM
@@ -113,6 +114,7 @@ class TestRunConversation:
             yield StreamDelta(content=None, done=True)
 
         mock_service.stream_response = _stream
+        mock_service.auto_title = AsyncMock(return_value="My Title")
 
         await run_conversation(
             model_id="test-model",
@@ -123,6 +125,8 @@ class TestRunConversation:
         assert mock_console.input.call_count == 2
         output = mock_console.file.getvalue()
         assert "Hi!" in output
+        assert "Session titled: 'My Title'" in output
+        mock_service.auto_title.assert_awaited_once()
 
 
 class TestSlashCommands:
@@ -137,6 +141,7 @@ class TestSlashCommands:
             id="test-model", provider_id="test", type=ModelType.LLM
         )
         svc.close = AsyncMock()
+        svc.auto_title = AsyncMock(return_value=None)
 
         async def _done(model, messages):
             yield StreamDelta(content=None, done=True)
@@ -263,6 +268,7 @@ class TestSlashSessions:
             id="test-model", provider_id="test", type=ModelType.LLM
         )
         svc.close = AsyncMock()
+        svc.auto_title = AsyncMock(return_value=None)
         svc.stream_response = AsyncMock()
         svc.resolve_model = AsyncMock(
             return_value=ModelData(

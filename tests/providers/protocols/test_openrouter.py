@@ -36,8 +36,8 @@ class TestOpenRouterFetchProtocol:
         ]
         response = SimpleNamespace(data=models)
 
-        mock_client = AsyncMock()
-        mock_client.models.list = AsyncMock(return_value=response)
+        mock_client = MagicMock()
+        mock_client.models.list.return_value = response
 
         with patch(
             "yapa.providers.protocols.openrouter.OpenRouter",
@@ -59,8 +59,8 @@ class TestOpenRouterFetchProtocol:
         ]
         response = SimpleNamespace(data=models)
 
-        mock_client = AsyncMock()
-        mock_client.models.list = AsyncMock(return_value=response)
+        mock_client = MagicMock()
+        mock_client.models.list.return_value = response
 
         with patch(
             "yapa.providers.protocols.openrouter.OpenRouter",
@@ -76,8 +76,8 @@ class TestOpenRouterFetchProtocol:
         models = [self._make_model("gpt-4", ["text"])]
         response = SimpleNamespace(data=models)
 
-        mock_client = AsyncMock()
-        mock_client.models.list = AsyncMock(return_value=response)
+        mock_client = MagicMock()
+        mock_client.models.list.return_value = response
 
         with patch(
             "yapa.providers.protocols.openrouter.OpenRouter",
@@ -93,8 +93,8 @@ class TestOpenRouterFetchProtocol:
         models = [self._make_model("gpt-4", ["text"])]
         response = SimpleNamespace(data=models)
 
-        mock_client = AsyncMock()
-        mock_client.models.list = AsyncMock(return_value=response)
+        mock_client = MagicMock()
+        mock_client.models.list.return_value = response
 
         with patch(
             "yapa.providers.protocols.openrouter.OpenRouter",
@@ -110,8 +110,8 @@ class TestOpenRouterFetchProtocol:
         models = [self._make_model("claude-opus", ["text"])]
         response = SimpleNamespace(data=models)
 
-        mock_client = AsyncMock()
-        mock_client.models.list = AsyncMock(return_value=response)
+        mock_client = MagicMock()
+        mock_client.models.list.return_value = response
 
         with patch(
             "yapa.providers.protocols.openrouter.OpenRouter",

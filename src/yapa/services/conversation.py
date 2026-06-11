@@ -10,12 +10,19 @@ from yapa.models import (
     ModelData,
     SessionSummary,
     StreamDelta,
+    SystemMessage,
     UserMessage,
 )
 from yapa.providers.exceptions import ModelInvocationError
 
 from .exceptions import ConversationError
 from .provider import ProviderService
+
+TITLE_SYSTEM_PROMPT = (
+    "Generate a concise title (max 5 words) for this conversation "
+    "based on the user's first message. Respond with ONLY the title, "
+    "no punctuation or quotes."
+)
 
 
 class ConversationService:
@@ -141,6 +148,46 @@ class ConversationService:
 
     async def close(self) -> None:
         """Clean up resources."""
+        return None
+
+    async def generate_title(self, user_prompt: str) -> str | None:
+        """
+        Generate a conversation title from a user message using the LLM.
+
+        Args:
+            user_prompt: The user's message to base the title on.
+
+        Returns:
+            The generated title string, or None if generation failed.
+        """
+        if not self._model:
+            return None
+        provider = self._ps.get_provider_by_model(self._model)
+        system_msg = SystemMessage(content=TITLE_SYSTEM_PROMPT)
+        user_msg = UserMessage(content=user_prompt)
+        buffer = ""
+        try:
+            async for delta in provider.invoke_llm(
+                model=self._model,
+                messages=[system_msg, user_msg],
+            ):
+                if delta.content:
+                    buffer += delta.content
+        except ModelInvocationError:
+            return None
+        title = buffer.strip().strip('"').strip("'").strip()
+        return title[:60] if title else None
+
+    async def auto_title(self) -> str | None:
+        """Auto-title the current session based on the first user message."""
+        if not self._session_id:
+            return None
+        for msg in self._messages:
+            if msg.role == "user":
+                title = await self.generate_title(msg.content)
+                if title:
+                    self._session_repo.rename(self._session_id, title)
+                return title
         return None
 
     async def stream_response(

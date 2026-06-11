@@ -1,7 +1,7 @@
 """Service for managing inference providers and models."""
 
 from yapa.logging import get_logger
-from yapa.models import ModelData
+from yapa.models import ModelData, ModelType
 from yapa.providers import (
     DEFAULT_PROVIDERS,
     InferenceProvider,
@@ -110,9 +110,15 @@ class ProviderService:
             raise ValueError(f"No provider found that supports model '{model_id}'")
         return provider
 
-    async def _list_models_all_providers(self) -> dict[str, list[ModelData]]:
+    async def _list_models_all_providers(
+        self, model_type: ModelType | None = None
+    ) -> dict[str, list[ModelData]]:
         """
         Get a list of available models for all providers.
+
+        Args:
+            model_type (ModelType | None): Optional filter to only include models of a
+                specific type (e.g., LLM). If None, all model types are included.
 
         Returns:
             dict[str, list[ModelData]]: A dictionary mapping provider IDs to lists of
@@ -121,7 +127,7 @@ class ProviderService:
         all_models = {}
         for pid, provider in self._provider_cache.items():
             try:
-                models = await provider.list_models()
+                models = await provider.list_models(model_type)
                 all_models[pid] = models
             except ModelsFetchError as e:
                 logger.error(f"Failed to fetch models for provider '{pid}': {e}")
@@ -129,13 +135,15 @@ class ProviderService:
         return all_models
 
     async def _list_models_single_provider(
-        self, provider_id: str
+        self, provider_id: str, model_type: ModelType | None = None
     ) -> dict[str, list[ModelData]]:
         """
         Get a list of available models for a specific provider.
 
         Args:
             provider_id (str): The ID of the provider to get models for.
+            model_type (ModelType | None): Optional filter to only include models of a
+                specific type (e.g., LLM). If None, all model types are included.
 
         Returns:
             dict[str, list[ModelData]]: A dictionary with a single key (the provider ID)
@@ -143,14 +151,14 @@ class ProviderService:
         """
         provider = self.get_provider(provider_id)
         try:
-            models = await provider.list_models()
+            models = await provider.list_models(model_type)
             return {provider_id: models}
         except ModelsFetchError as e:
             logger.error(f"Failed to fetch models for provider '{provider_id}': {e}")
             return {provider_id: []}
 
     async def list_models(
-        self, provider_id: str | None = None
+        self, provider_id: str | None = None, model_type: ModelType | None = None
     ) -> dict[str, list[ModelData]]:
         """
         Get a list of available models for a specific provider or all providers.
@@ -158,15 +166,17 @@ class ProviderService:
         Args:
             provider_id (str | None): The ID of the provider to get models for, or
                 None to get models for all providers.
+            model_type (ModelType | None): Optional filter to only include models of a
+                specific type (e.g., LLM). If None, all model types are included.
 
         Returns:
             dict[str, list[ModelData]]: A dictionary mapping provider IDs to lists of
                 available models.
         """
         if provider_id:
-            return await self._list_models_single_provider(provider_id)
+            return await self._list_models_single_provider(provider_id, model_type)
         else:
-            return await self._list_models_all_providers()
+            return await self._list_models_all_providers(model_type)
 
     async def get_model(self, model_full_id: str) -> ModelData:
         """
