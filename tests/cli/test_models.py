@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 
 from yapa.cli.models import _strip_group, display_models, set_default_model
 from yapa.config import Config
-from yapa.models import ModelData
+from yapa.models import ModelData, ModelType
 
 
 class TestStripGroup:
@@ -31,8 +31,8 @@ class TestDisplayModels:
 
     def test_single_group(self, capsys):
         models = [
-            ModelData(id="openai/gpt-4o", provider_id="p"),
-            ModelData(id="openai/gpt-4-turbo", provider_id="p"),
+            ModelData(id="openai/gpt-4o", provider_id="p", type=ModelType.LLM),
+            ModelData(id="openai/gpt-4-turbo", provider_id="p", type=ModelType.LLM),
         ]
         display_models("openrouter", models)
         captured = capsys.readouterr()
@@ -42,8 +42,8 @@ class TestDisplayModels:
 
     def test_tree_connectors_single_group(self, capsys):
         models = [
-            ModelData(id="openai/gpt-4o", provider_id="p"),
-            ModelData(id="openai/gpt-4-turbo", provider_id="p"),
+            ModelData(id="openai/gpt-4o", provider_id="p", type=ModelType.LLM),
+            ModelData(id="openai/gpt-4-turbo", provider_id="p", type=ModelType.LLM),
         ]
         display_models("openrouter", models)
         captured = capsys.readouterr()
@@ -52,9 +52,9 @@ class TestDisplayModels:
 
     def test_multiple_groups(self, capsys):
         models = [
-            ModelData(id="openai/gpt-4o", provider_id="p"),
-            ModelData(id="anthropic/claude-3", provider_id="p"),
-            ModelData(id="mistral/mistral-small", provider_id="p"),
+            ModelData(id="openai/gpt-4o", provider_id="p", type=ModelType.LLM),
+            ModelData(id="anthropic/claude-3", provider_id="p", type=ModelType.LLM),
+            ModelData(id="mistral/mistral-small", provider_id="p", type=ModelType.LLM),
         ]
         display_models("openrouter", models)
         captured = capsys.readouterr()
@@ -64,8 +64,8 @@ class TestDisplayModels:
 
     def test_other_group(self, capsys):
         models = [
-            ModelData(id="codellama-7b", provider_id="p"),
-            ModelData(id="openai/gpt-4o", provider_id="p"),
+            ModelData(id="codellama-7b", provider_id="p", type=ModelType.LLM),
+            ModelData(id="openai/gpt-4o", provider_id="p", type=ModelType.LLM),
         ]
         display_models("test", models)
         captured = capsys.readouterr()
@@ -79,13 +79,17 @@ class TestSetDefaultModel:
     """Tests for set_default_model."""
 
     async def test_sets_default_model(self, monkeypatch):
-        models = [ModelData(id="openai/gpt-4o", provider_id="openrouter")]
-        mock_get_models = AsyncMock(return_value={"openrouter": models})
+        models = [
+            ModelData(
+                id="openai/gpt-4o", provider_id="openrouter", type=ModelType.LLM
+            )
+        ]
+        mock_list_models = AsyncMock(return_value={"openrouter": models})
         monkeypatch.setattr(
-            "yapa.cli.models.ProviderService.get_models", mock_get_models
+            "yapa.cli.models.ProviderService.list_models", mock_list_models
         )
 
-        config = Config(default_model_id="old", default_provider_id="old")
+        config = Config(default_model="old:old/model")
         monkeypatch.setattr("yapa.cli.models.get_config", lambda: config)
 
         save_calls: list[Config] = []
@@ -95,14 +99,13 @@ class TestSetDefaultModel:
 
         await set_default_model("openai/gpt-4o")
 
-        assert config.default_model_id == "openai/gpt-4o"
-        assert config.default_provider_id == "openrouter"
+        assert config.default_model == "openrouter:openai/gpt-4o"
         assert len(save_calls) == 1
 
     async def test_model_not_found(self, monkeypatch, capsys):
-        mock_get_models = AsyncMock(return_value={"openrouter": []})
+        mock_list_models = AsyncMock(return_value={"openrouter": []})
         monkeypatch.setattr(
-            "yapa.cli.models.ProviderService.get_models", mock_get_models
+            "yapa.cli.models.ProviderService.list_models", mock_list_models
         )
 
         await set_default_model("nonexistent/model")
@@ -111,16 +114,24 @@ class TestSetDefaultModel:
         assert "not found" in captured.out
 
     async def test_scoped_to_provider(self, monkeypatch):
-        models_a = [ModelData(id="prov_a/model-a", provider_id="prov_a")]
-        models_b = [ModelData(id="prov_b/model-b", provider_id="prov_b")]
-        mock_get_models = AsyncMock(
+        models_a = [
+            ModelData(
+                id="prov_a/model-a", provider_id="prov_a", type=ModelType.LLM
+            )
+        ]
+        models_b = [
+            ModelData(
+                id="prov_b/model-b", provider_id="prov_b", type=ModelType.LLM
+            )
+        ]
+        mock_list_models = AsyncMock(
             return_value={"prov_a": models_a, "prov_b": models_b}
         )
         monkeypatch.setattr(
-            "yapa.cli.models.ProviderService.get_models", mock_get_models
+            "yapa.cli.models.ProviderService.list_models", mock_list_models
         )
 
-        config = Config(default_model_id="old", default_provider_id="old")
+        config = Config(default_model="old:old/model")
         monkeypatch.setattr("yapa.cli.models.get_config", lambda: config)
 
         save_calls: list[Config] = []
@@ -130,17 +141,25 @@ class TestSetDefaultModel:
 
         await set_default_model("prov_a/model-a", "prov_a")
 
-        assert config.default_model_id == "prov_a/model-a"
+        assert config.default_model == "prov_a:prov_a/model-a"
         assert len(save_calls) == 1
 
     async def test_scoped_not_found_outside_provider(self, monkeypatch, capsys):
-        models_a = [ModelData(id="prov_a/model-a", provider_id="prov_a")]
-        models_b = [ModelData(id="prov_b/model-b", provider_id="prov_b")]
-        mock_get_models = AsyncMock(
+        models_a = [
+            ModelData(
+                id="prov_a/model-a", provider_id="prov_a", type=ModelType.LLM
+            )
+        ]
+        models_b = [
+            ModelData(
+                id="prov_b/model-b", provider_id="prov_b", type=ModelType.LLM
+            )
+        ]
+        mock_list_models = AsyncMock(
             return_value={"prov_a": models_a, "prov_b": models_b}
         )
         monkeypatch.setattr(
-            "yapa.cli.models.ProviderService.get_models", mock_get_models
+            "yapa.cli.models.ProviderService.list_models", mock_list_models
         )
 
         await set_default_model("prov_b/model-b", "prov_a")

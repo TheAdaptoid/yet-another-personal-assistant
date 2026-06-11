@@ -27,10 +27,11 @@ src/yapa/
 │   ├── message.py   # User/System/Assistant message models
 │   └── session.py   # SessionSummary
 ├── providers/
-│   ├── base.py      # InferenceProvider base class
+│   ├── base.py          # InferenceProvider base class + protocols
 │   ├── exceptions.py
-│   ├── lmstudio.py
-│   └── openrouter.py
+│   ├── concretes/       # Provider implementations (OpenRouter, LM Studio, Ollama)
+│   ├── protocols/       # API protocol implementations (OpenAI-compatible, OpenRouter)
+│   └── __init__.py      # DEFAULT_PROVIDERS list
 └── services/
     ├── conversation.py  # ConversationService — chat orchestration
     ├── exceptions.py    # ConversationError
@@ -48,8 +49,10 @@ uv run python -m yapa models --provider <id>       # scope to a provider
 uv run python -m yapa chat                         # interactive chat loop
 uv run python -m yapa chat --model <id>            # chat with a specific model
 uv run python -m yapa chat --session <id>          # resume a session
+uv run python -m yapa chat --continue,-c           # resume most recent session
 uv run python -m yapa sessions list                # list sessions
 uv run python -m yapa sessions rename <id> <title> # rename a session
+uv run python -m yapa sessions rename <id> --auto  # auto-generate title via LLM
 uv run python -m yapa sessions delete <id>         # delete a session
 uv run python -m yapa sessions delete --purge      # delete empty sessions
 uv run pytest tests/ -v                            # full test suite
@@ -67,10 +70,13 @@ Recommended local gate:
 ## Testing Notes
 
 - `pytest.ini` sets `asyncio_mode = auto`.
-- Coverage is always on (`--cov=src`).
+- Coverage is always on (`--cov=src`) with an 80% floor (`--cov-fail-under=80`).
 - All four test suites (cli, database, providers, services) use in-memory SQLite
   via an autouse `patch_get_engine` fixture in each directory's `conftest.py`.
   The engine is disposed after each test to avoid `ResourceWarning`.
+- Provider tests are organized in three sub-suites: `concretes/` (per-provider
+  init & fetch tests), `protocols/` (API protocol-level tests), and
+  `test_base.py` / `test_exceptions.py`.
 - Provider tests use lightweight mocks (`AsyncMock`, `MagicMock`,
   `PropertyMock`) and `SimpleNamespace` test payloads.
 - `tests/providers/conftest.py` patches `yapa.providers.base.get_logger`
@@ -110,13 +116,25 @@ and continues to the next provider.
 ## Session Commands
 
 - `chat` auto-creates a session when `--session` is not provided.
+- `--continue` / `-c` resumes the most recently updated session.
 - Resuming requires an explicit `--model` (no auto-detection from history).
 - Full session IDs are shown in CLI output.
 - `SessionRepository.get()` and `delete()` raise `ValueError` on missing session.
+- New sessions are auto-titled after the first assistant response using the default LLM.
+  - `ConversationService.generate_title(user_prompt)` calls the provider with a
+    system prompt asking for a 5-word title.
+  - `ConversationService.auto_title()` finds the first user message, generates a
+    title, and persists it via `_session_repo.rename()`.
+  - Only brand-new sessions (`message_count == 0`) are auto-titled.
+- `sessions rename --auto` generates a title from any existing session's first
+  user message via `_auto_rename_session()` in `cli/sessions.py`.
+  - Creates a temporary `ConversationService`, calls `generate_title()` on the
+    first user message, then renames via `SessionService`.
 
 ## Model Display
 
-Models are grouped by vendor prefix (the part before `/` in the model ID):
+Models are grouped by vendor prefix (the part before `/` in the model ID).
+Only LLM-type models are displayed (embedding/vision models are filtered out):
 
 ```
 Models for provider 'openrouter' (8 total):

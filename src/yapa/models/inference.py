@@ -1,6 +1,15 @@
 """Data models for inference-related data."""
 
-from pydantic import BaseModel, Field
+from enum import Enum
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class ModelType(Enum):
+    """Enumeration for model types."""
+
+    LLM = "llm"
+    OTHER = "other"
 
 
 class InferenceParams(BaseModel):
@@ -25,17 +34,27 @@ class ModelData(BaseModel):
     Attributes:
         id (str): Unique identifier for the model.
         provider_id (str): Identifier for the provider of the model.
+        type (ModelType): The type of the model.
     """
 
     id: str = Field(..., description="Unique identifier for the model")
     provider_id: str = Field(
         ..., description="Identifier for the provider of the model"
     )
+    type: ModelType = Field(..., description="The type of the model (e.g., 'llm')")
+
+    # Immutable and strict model configuration
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    @property
+    def full_id(self) -> str:
+        """Returns a combined identifier for the provider and model IDs."""
+        return f"{self.provider_id}:{self.id}"
 
 
 class StreamDelta(BaseModel):
     """
-    Data model for representing a delta in a streaming response.
+    Represents a delta in a streaming response.
 
     Attributes:
         content (str | None): The content of the delta, if any.
