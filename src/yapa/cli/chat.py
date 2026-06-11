@@ -1,7 +1,10 @@
 """Interactive conversation handler — slash-command-aware chat loop."""
 
-from rich.console import Console
+from rich.console import Console, Group
+from rich.live import Live
+from rich.markdown import Markdown
 from rich.rule import Rule
+from rich.text import Text
 
 from yapa.config import Config, get_config, save_config
 from yapa.models import AssistantMessage, SessionSummary
@@ -41,14 +44,25 @@ async def _handle_slash_command(
             con.print(f"[red]{e}[/red]")
             return
         svc.model = parsed
-        cfg.default_model_id = parsed.id
-        cfg.default_provider_id = parsed.provider_id
+        cfg.default_model = parsed.full_id
         save_config(cfg)
         con.print(f"[dim]Switched to model '{arg}'[/dim]")
     else:
         con.print(
             f"[red]Unknown command: /{cmd}. Type /help for available commands.[/red]"
         )
+
+
+def _build_renderables(
+    reasoning_content: str, content: str
+) -> list:
+    """Build Rich renderables for reasoning + content display."""
+    renderables = []
+    if reasoning_content:
+        renderables.append(Text(reasoning_content, style="dim"))
+    if content:
+        renderables.append(Markdown(content))
+    return renderables
 
 
 async def _stream_response(
@@ -67,19 +81,41 @@ async def _stream_response(
                 align="left",
             )
         )
-        con.print("[dim]  Thinking...  [/dim]", end="\r")
-        first_output = True
-        async for chunk in stream:
-            if first_output and (chunk.content or chunk.reasoning_content):
-                con.print(" " * 20, end="\r")
-                first_output = False
-            if chunk.content:
-                con.print(chunk.content, end="")
-            if chunk.reasoning_content:
-                con.print(f"[dim]{chunk.reasoning_content}[/dim]", end="")
-            if chunk.done:
-                con.print()
-                break
+
+        content_buffer = ""
+        reasoning_buffer = ""
+        had_reasoning = False
+        last_reasoning_chunk = ""
+
+        with Live(
+            console=con, refresh_per_second=10, vertical_overflow="visible"
+        ) as live:
+            live.update(Text("  Thinking...  ", style="dim"))
+
+            async for chunk in stream:
+                if chunk.reasoning_content:
+                    reasoning_buffer += chunk.reasoning_content
+                    had_reasoning = True
+                    last_reasoning_chunk = chunk.reasoning_content
+
+                if chunk.content:
+                    content_buffer += chunk.content
+
+                if chunk.done:
+                    if had_reasoning and not last_reasoning_chunk.endswith("\n"):
+                        reasoning_buffer += "\n"
+                    renderables = _build_renderables(
+                        reasoning_buffer, content_buffer
+                    )
+                    if renderables:
+                        live.update(Group(*renderables))
+                    break
+
+                renderables = _build_renderables(
+                    reasoning_buffer, content_buffer
+                )
+                if renderables:
+                    live.update(Group(*renderables))
     except ConversationError as e:
         con.print(" " * 20, end="\r")
         con.print(f"[red]{e}[/red]")
@@ -149,7 +185,7 @@ async def run_conversation(
 
     Args:
         model_id (str | None): Model identifier string. Falls back to
-            config.default_model_id.
+            config.default_model.
         session_id (str | None): Session to resume, if any.
         service (ConversationService | None): Injectable conversation service
             (default: fresh ConversationService).
@@ -164,7 +200,7 @@ async def run_conversation(
     if model is not None:
         svc.model = model
 
-    info = svc.start(session_id=session_id)
+    info = await svc.start(session_id=session_id)
     _start_session(svc, info, session_id, con)
 
     try:

@@ -64,12 +64,12 @@ class ConversationService:
         """Set the model to use for this conversation."""
         self._model = model
 
-    async def resolve_model(self, model_id: str) -> ModelData:
+    async def resolve_model(self, model_full_id: str) -> ModelData:
         """
-        Resolve a model ID string to a ModelData with the correct provider.
+        Resolve a model full ID string to a ModelData with the correct provider.
 
         Args:
-            model_id: The model identifier to resolve.
+            model_full_id: The full model identifier to resolve.
 
         Returns:
             ModelData with the correct provider_id.
@@ -77,8 +77,7 @@ class ConversationService:
         Raises:
             ValueError: If no provider serves the given model ID.
         """
-        provider = await self._ps.get_provider_by_model_id(model_id)
-        return ModelData(id=model_id, provider_id=provider.id)
+        return await self._ps.get_model(model_full_id)
 
     def _save_message(self, message: Message) -> None:
         """Persist a message to the current session."""
@@ -87,7 +86,7 @@ class ConversationService:
         self._messages.append(message)
         self._session_repo.add_message(self._session_id, message)
 
-    def start(
+    async def start(
         self,
         session_id: str | None = None,
         model: ModelData | None = None,
@@ -117,10 +116,7 @@ class ConversationService:
             if model:
                 self._model = model
             else:
-                self._model = ModelData(
-                    id=self._cfg.default_model_id,
-                    provider_id=self._cfg.default_provider_id,
-                )
+                self._model = await self._ps.get_model(self._cfg.default_model)
 
         return session.to_summary()
 
@@ -181,8 +177,8 @@ class ConversationService:
         buffer = ""
 
         try:
-            async for delta in provider.invoke_model(
-                model=self._model.id,
+            async for delta in provider.invoke_llm(
+                model=self._model,
                 messages=[*self._messages, user_msg],
             ):
                 if delta.content:

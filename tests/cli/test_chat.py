@@ -1,5 +1,6 @@
 """Tests for chat conversation handler."""
 
+import io
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -10,6 +11,7 @@ from yapa.config import Config
 from yapa.models import (
     AssistantMessage,
     ModelData,
+    ModelType,
     SessionSummary,
     StreamDelta,
     UserMessage,
@@ -34,9 +36,11 @@ class TestRunConversation:
     @pytest.fixture
     def mock_service(self):
         svc = MagicMock()
-        svc.start.return_value = _make_summary()
+        svc.start = AsyncMock(return_value=_make_summary())
         svc.switch_session.return_value = _make_summary(message_count=3)
-        svc.model = ModelData(id="test-model", provider_id="test")
+        svc.model = ModelData(
+            id="test-model", provider_id="test", type=ModelType.LLM
+        )
         svc.messages = [
             UserMessage(content="What is the capital of France?"),
             AssistantMessage(
@@ -51,14 +55,16 @@ class TestRunConversation:
         svc.stream_response = _stream
         svc.close = AsyncMock()
         svc.resolve_model = AsyncMock(
-            return_value=ModelData(id="test-model", provider_id="test")
+            return_value=ModelData(
+                id="test-model", provider_id="test", type=ModelType.LLM
+            )
         )
         return svc
 
     @pytest.fixture
     def mock_console(self):
-        con = MagicMock(spec=Console)
-        con.input.return_value = "exit"
+        con = Console(file=io.StringIO(), force_terminal=False, no_color=True)
+        con.input = MagicMock(return_value="exit")
         return con
 
     async def test_exits_immediately(self, mock_service, mock_console):
@@ -80,26 +86,11 @@ class TestRunConversation:
             service=mock_service,
             console=mock_console,
         )
-        resume_calls = [
-            c
-            for c in mock_console.print.call_args_list
-            if "resumed session" in str(c)
-        ]
-        started_calls = [
-            c
-            for c in mock_console.print.call_args_list
-            if "new session" in str(c)
-        ]
-        assert len(resume_calls) >= 1
-        assert len(started_calls) == 0
-
-        history_calls = [
-            c
-            for c in mock_console.print.call_args_list
-            if "What is the capital of France?" in str(c)
-            or "The capital of France is Paris." in str(c)
-        ]
-        assert len(history_calls) >= 1
+        output = mock_console.file.getvalue()
+        assert "resumed session" in output
+        assert "new session" not in output
+        assert "What is the capital of France?" in output
+        assert "The capital of France is Paris." in output
 
     async def test_default_model_from_config(self, mock_service, mock_console):
         """When model_id is None, falls back to config.default_model_id."""
@@ -130,10 +121,8 @@ class TestRunConversation:
         )
 
         assert mock_console.input.call_count == 2
-        assistant_calls = [
-            c for c in mock_console.print.call_args_list if "Hi!" in str(c)
-        ]
-        assert len(assistant_calls) >= 1
+        output = mock_console.file.getvalue()
+        assert "Hi!" in output
 
 
 class TestSlashCommands:
@@ -142,9 +131,11 @@ class TestSlashCommands:
     @pytest.fixture
     def mock_service(self):
         svc = MagicMock()
-        svc.start.return_value = _make_summary()
+        svc.start = AsyncMock(return_value=_make_summary())
         svc.switch_session.return_value = _make_summary(message_count=5)
-        svc.model = ModelData(id="test-model", provider_id="test")
+        svc.model = ModelData(
+            id="test-model", provider_id="test", type=ModelType.LLM
+        )
         svc.close = AsyncMock()
 
         async def _done(model, messages):
@@ -152,7 +143,9 @@ class TestSlashCommands:
 
         svc.stream_response = _done
         svc.resolve_model = AsyncMock(
-            return_value=ModelData(id="test-model", provider_id="test")
+            return_value=ModelData(
+                id="test-model", provider_id="test", type=ModelType.LLM
+            )
         )
         return svc
 
@@ -174,11 +167,13 @@ class TestSlashCommands:
         """'/model <id>' resolves the model and persists to config."""
         mock_service.resolve_model = AsyncMock(
             return_value=ModelData(
-                id="new-provider/new-model", provider_id="real-provider"
+                id="new-provider/new-model",
+                provider_id="real-provider",
+                type=ModelType.LLM,
             )
         )
         mock_console.input.side_effect = ["/model new-provider/new-model", "exit"]
-        cfg = Config(default_model_id="old", default_provider_id="old")
+        cfg = Config(default_model="old:old/model")
         await run_conversation(
             model_id="test-model",
             service=mock_service,
@@ -186,10 +181,11 @@ class TestSlashCommands:
             config=cfg,
         )
         assert mock_service.model == ModelData(
-            id="new-provider/new-model", provider_id="real-provider"
+            id="new-provider/new-model",
+            provider_id="real-provider",
+            type=ModelType.LLM,
         )
-        assert cfg.default_model_id == "new-provider/new-model"
-        assert cfg.default_provider_id == "real-provider"
+        assert cfg.default_model == "real-provider:new-provider/new-model"
 
     async def test_slash_model_missing_arg(self, mock_service, mock_console):
         """'/model' with no arg shows usage."""
@@ -262,12 +258,16 @@ class TestSlashSessions:
     @pytest.fixture
     def mock_service(self):
         svc = MagicMock()
-        svc.start.return_value = _make_summary()
-        svc.model = ModelData(id="test-model", provider_id="test")
+        svc.start = AsyncMock(return_value=_make_summary())
+        svc.model = ModelData(
+            id="test-model", provider_id="test", type=ModelType.LLM
+        )
         svc.close = AsyncMock()
         svc.stream_response = AsyncMock()
         svc.resolve_model = AsyncMock(
-            return_value=ModelData(id="test-model", provider_id="test")
+            return_value=ModelData(
+                id="test-model", provider_id="test", type=ModelType.LLM
+            )
         )
         return svc
 

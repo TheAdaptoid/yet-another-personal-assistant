@@ -50,7 +50,7 @@ class OpenRouterFetchProtocol(ModelFetchProtocol):
             api_key=self._config.openrouter_api_key,
             url_params={"output_modalities": filter_type} if filter_type else None,
         ) as client:
-            response: ModelsListResponse = await client.models.list()
+            response: ModelsListResponse = client.models.list()
             unformatted_models: list[Model] = response.data
             formatted_models = [
                 self._format_model(model_info) for model_info in unformatted_models

@@ -46,10 +46,15 @@ class ModelData(BaseModel):
     # Immutable and strict model configuration
     model_config = ConfigDict(extra="forbid", frozen=True)
 
+    @property
+    def full_id(self) -> str:
+        """Returns a combined identifier for the provider and model IDs."""
+        return f"{self.provider_id}:{self.id}"
+
 
 class StreamDelta(BaseModel):
     """
-    Data model for representing a delta in a streaming response.
+    Represents a delta in a streaming response.
 
     Attributes:
         content (str | None): The content of the delta, if any.
