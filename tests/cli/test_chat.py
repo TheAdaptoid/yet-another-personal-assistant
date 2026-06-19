@@ -16,6 +16,7 @@ from yapa.models import (
     StreamDelta,
     UserMessage,
 )
+from yapa.services import ConversationService
 
 
 def _make_summary(**overrides: str | int) -> SessionSummary:
@@ -93,17 +94,35 @@ class TestRunConversation:
         assert "What is the capital of France?" in output
         assert "The capital of France is Paris." in output
 
-    async def test_default_model_from_config(self, mock_service, mock_console):
-        """When model_id is None, falls back to config.default_model_id."""
+    async def test_default_model_from_config(self, mock_console):
+        """When model_id is None, falls back to config.default_model."""
         mock_console.input.return_value = "exit"
-        cfg = Config(default_model_id="cfg-default-model", default_provider_id="cfg")
+
+        mock_provider = MagicMock()
+
+        async def _invoke(model, messages, params=None):
+            yield StreamDelta(content=None, reasoning_content=None, done=True)
+
+        mock_provider.invoke_llm = _invoke
+
+        ps = MagicMock()
+        ps.get_model = AsyncMock(
+            return_value=ModelData(
+                id="cfg-default-model", provider_id="cfg", type=ModelType.LLM
+            )
+        )
+        ps.get_provider_by_model.return_value = mock_provider
+
+        cfg = Config(default_model="cfg:cfg-default-model")
+        svc = ConversationService(provider_service=ps, config=cfg)
+
         await run_conversation(
             model_id=None,
-            service=mock_service,
+            service=svc,
             console=mock_console,
             config=cfg,
         )
-        mock_service.start.assert_called_once()
+        ps.get_model.assert_awaited_once_with("cfg:cfg-default-model")
 
     async def test_full_turn(self, mock_service, mock_console):
         """Sends a user message, receives an assistant reply, then exits."""
