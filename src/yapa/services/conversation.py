@@ -1,6 +1,7 @@
 """Conversation service — UI-agnostic chat orchestration."""
 
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
+from typing import Self
 
 from yapa.config import Config, get_config
 from yapa.database.repositories import SessionRepository
@@ -147,8 +148,23 @@ class ConversationService:
         return session.to_summary()
 
     async def close(self) -> None:
-        """Clean up resources."""
-        return None
+        """Clear in-memory state and mark the service as closed."""
+        self._messages.clear()
+        self._session_id = None
+        self._model = None
+
+    async def __aenter__(self) -> Self:
+        """Enter async context manager."""
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: object,
+    ) -> None:
+        """Exit async context manager, closing the service."""
+        await self.close()
 
     async def generate_title(self, user_prompt: str) -> str | None:
         """

@@ -282,13 +282,55 @@ class TestSwitchSession:
 class TestClose:
     """Tests for ConversationService.close()."""
 
-    async def test_close_does_not_raise(
+    async def test_close_clears_state(
+        self, mock_provider_service, repo, config
+    ):
+        service = ConversationService(
+            provider_service=mock_provider_service, config=config, session_repo=repo
+        )
+        await service.start()
+        assert service.session_id is not None
+        assert service.model is not None
+
+        await service.close()
+
+        assert service.session_id is None
+        assert service.model is None
+        assert service.messages == []
+
+    async def test_close_idempotent(
         self, mock_provider_service, repo, config
     ):
         service = ConversationService(
             provider_service=mock_provider_service, config=config, session_repo=repo
         )
         await service.close()
+        await service.close()
+        assert service.session_id is None
+
+    async def test_context_manager(
+        self, mock_provider_service, repo, config
+    ):
+        service = ConversationService(
+            provider_service=mock_provider_service, config=config, session_repo=repo
+        )
+        async with service as svc:
+            await svc.start()
+            assert svc.session_id is not None
+        assert service.session_id is None
+        assert service.model is None
+
+    async def test_context_manager_on_exception(
+        self, mock_provider_service, repo, config
+    ):
+        service = ConversationService(
+            provider_service=mock_provider_service, config=config, session_repo=repo
+        )
+        with pytest.raises(RuntimeError):
+            async with service as svc:
+                await svc.start()
+                raise RuntimeError("test error")
+        assert service.session_id is None
 
 
 class TestMessages:

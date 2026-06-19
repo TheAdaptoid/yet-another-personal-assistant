@@ -24,6 +24,13 @@ def patch_get_engine():
     engine.dispose()
 
 
+@pytest.fixture(autouse=True)
+def patch_save_config():
+    """Prevent chat tests from writing to the real config file."""
+    with patch("yapa.cli.chat.save_config"):
+        yield
+
+
 @pytest.fixture
 def seeded_session():
     """Create a session with one user and one assistant message."""

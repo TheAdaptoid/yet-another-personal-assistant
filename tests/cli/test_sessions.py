@@ -1,6 +1,6 @@
 """Tests for session command handlers."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -96,12 +96,12 @@ class TestAutoRenameSession:
 
     async def test_auto_rename_success(self, seeded_session):
         """_auto_rename_session generates title and renames."""
-        mock_svc = MagicMock()
-        mock_svc.start = AsyncMock()
+        mock_svc = AsyncMock()
+        mock_svc.__aenter__.return_value = mock_svc
         mock_svc.messages = [UserMessage(content="Hello world")]
         mock_svc.generate_title = AsyncMock(return_value="My Title")
 
-        with patch("yapa.services.ConversationService", return_value=mock_svc):
+        with patch("yapa.cli.sessions.ConversationService", return_value=mock_svc):
             result = await _auto_rename_session(seeded_session.id)
 
         assert result == "My Title"
@@ -112,12 +112,12 @@ class TestAutoRenameSession:
 
     async def test_auto_rename_title_fails(self, seeded_session):
         """_auto_rename_session returns None when generate_title fails."""
-        mock_svc = MagicMock()
-        mock_svc.start = AsyncMock()
+        mock_svc = AsyncMock()
+        mock_svc.__aenter__.return_value = mock_svc
         mock_svc.messages = [UserMessage(content="Hello world")]
         mock_svc.generate_title = AsyncMock(return_value=None)
 
-        with patch("yapa.services.ConversationService", return_value=mock_svc):
+        with patch("yapa.cli.sessions.ConversationService", return_value=mock_svc):
             result = await _auto_rename_session(seeded_session.id)
 
         assert result is None
@@ -126,22 +126,23 @@ class TestAutoRenameSession:
 
     async def test_auto_rename_missing_session(self):
         """_auto_rename_session returns None for missing session."""
-        mock_svc = MagicMock()
+        mock_svc = AsyncMock()
+        mock_svc.__aenter__.return_value = mock_svc
         mock_svc.start = AsyncMock(side_effect=ValueError("not found"))
 
-        with patch("yapa.services.ConversationService", return_value=mock_svc):
+        with patch("yapa.cli.sessions.ConversationService", return_value=mock_svc):
             result = await _auto_rename_session("nonexistent-id")
 
         assert result is None
 
     async def test_auto_rename_no_user_messages(self, seeded_session):
         """_auto_rename_session returns None when no user messages."""
-        mock_svc = MagicMock()
-        mock_svc.start = AsyncMock()
+        mock_svc = AsyncMock()
+        mock_svc.__aenter__.return_value = mock_svc
         mock_svc.messages = []
         mock_svc.generate_title = AsyncMock(return_value="My Title")
 
-        with patch("yapa.services.ConversationService", return_value=mock_svc):
+        with patch("yapa.cli.sessions.ConversationService", return_value=mock_svc):
             result = await _auto_rename_session(seeded_session.id)
 
         assert result is None
