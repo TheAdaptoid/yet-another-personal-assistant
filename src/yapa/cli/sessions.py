@@ -7,7 +7,7 @@ from rich.prompt import Confirm
 from rich.rule import Rule
 
 from yapa.models import SessionSummary
-from yapa.services import SessionService
+from yapa.services import ConversationService, SessionService
 
 _session_service: SessionService | None = None
 
@@ -140,19 +140,15 @@ def purge_sessions() -> None:
 
 async def _auto_rename_session(session_id: str) -> str | None:
     """Auto-rename a session using LLM title generation."""
-    from yapa.services import ConversationService
-
     try:
-        svc = ConversationService()
-        await svc.start(session_id=session_id)
+        async with ConversationService() as svc:
+            await svc.start(session_id=session_id)
+            for msg in svc.messages:
+                if msg.role == "user":
+                    title = await svc.generate_title(msg.content)
+                    if title:
+                        _get_session_service().rename(session_id, title)
+                        return title
+                    return None
     except ValueError:
         return None
-
-    for msg in svc.messages:
-        if msg.role == "user":
-            title = await svc.generate_title(msg.content)
-            if title:
-                _get_session_service().rename(session_id, title)
-                return title
-            return None
-    return None
