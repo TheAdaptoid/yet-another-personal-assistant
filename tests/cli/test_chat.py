@@ -108,12 +108,12 @@ class TestRunConversation:
         ps = MagicMock()
         ps.get_model = AsyncMock(
             return_value=ModelData(
-                id="cfg-default-model", provider_id="cfg", type=ModelType.LLM
+                id="openrouter/free", provider_id="openrouter", type=ModelType.LLM
             )
         )
         ps.get_provider_by_model.return_value = mock_provider
 
-        cfg = Config(default_model="cfg:cfg-default-model")
+        cfg = Config(default_model="openrouter:openrouter/free")
         svc = ConversationService(provider_service=ps, config=cfg)
 
         await run_conversation(
@@ -122,7 +122,7 @@ class TestRunConversation:
             console=mock_console,
             config=cfg,
         )
-        ps.get_model.assert_awaited_once_with("cfg:cfg-default-model")
+        ps.get_model.assert_awaited_once_with("openrouter:openrouter/free")
 
     async def test_full_turn(self, mock_service, mock_console):
         """Sends a user message, receives an assistant reply, then exits."""
