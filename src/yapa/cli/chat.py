@@ -26,8 +26,8 @@ async def _handle_slash_command(
     svc: ConversationService,
     cfg: Config,
     con: Console,
-) -> None:
-    """Handle a parsed slash command."""
+) -> SessionSummary | None:
+    """Handle a parsed slash command. Returns new SessionSummary if /session."""
     if cmd == "help":
         con.print(_HELP_TEXT)
     elif cmd == "sessions":
@@ -37,20 +37,35 @@ async def _handle_slash_command(
     elif cmd == "model":
         if not arg:
             con.print("[red]Usage: /model <model-id>[/red]")
-            return
+            return None
         try:
             parsed = await svc.resolve_model(arg)
         except ValueError as e:
             con.print(f"[red]{e}[/red]")
-            return
+            return None
         svc.model = parsed
         cfg.default_model = parsed.full_id
         save_config(cfg)
         con.print(f"[dim]Switched to model '{arg}'[/dim]")
+    elif cmd == "session":
+        if not arg:
+            con.print("[red]Usage: /session <session-id>[/red]")
+            return None
+        try:
+            info = svc.switch_session(arg)
+            con.print(
+                f"[dim]Switched to session '{info.id}'"
+                f" ({info.message_count} messages)"
+                "[/dim]"
+            )
+            return info
+        except ValueError as e:
+            con.print(f"[red]{e}[/red]")
     else:
         con.print(
             f"[red]Unknown command: /{cmd}. Type /help for available commands.[/red]"
         )
+    return None
 
 
 def _build_renderables(
@@ -167,7 +182,7 @@ def _start_session(
                         align="left",
                     )
                 )
-                con.print(msg.content)
+                con.print(Markdown(msg.content))
 
 
 async def run_conversation(
@@ -207,9 +222,15 @@ async def run_conversation(
     try:
         while True:
             con.print(Rule("[bold blue]You[/bold blue]", style="dim", align="left"))
-            prompt = con.input("[blue]> [/blue]")
+            try:
+                prompt = con.input("[blue]> [/blue]")
+            except EOFError:
+                break
 
-            if prompt.lower() in {"exit", "quit", "/exit"}:
+            if not prompt.strip():
+                continue
+
+            if prompt == "/exit":
                 con.print(
                     Rule(
                         f"session saved ({info.id})",
@@ -224,21 +245,9 @@ async def run_conversation(
                 cmd = parts[0].lower()
                 arg = parts[1] if len(parts) > 1 else ""
 
-                if cmd == "session":
-                    if not arg:
-                        con.print("[red]Usage: /session <session-id>[/red]")
-                        continue
-                    try:
-                        info = svc.switch_session(arg)
-                        con.print(
-                            f"[dim]Switched to session '{info.id}'"
-                            f" ({info.message_count} messages)"
-                            "[/dim]"
-                        )
-                    except ValueError as e:
-                        con.print(f"[red]{e}[/red]")
-                else:
-                    await _handle_slash_command(cmd, arg, svc, cfg, con)
+                result = await _handle_slash_command(cmd, arg, svc, cfg, con)
+                if result is not None:
+                    info = result
 
                 continue
 

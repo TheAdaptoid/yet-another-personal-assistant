@@ -66,7 +66,7 @@ class TestRunConversation:
     @pytest.fixture
     def mock_console(self):
         con = Console(file=io.StringIO(), force_terminal=False, no_color=True)
-        con.input = MagicMock(return_value="exit")
+        con.input = MagicMock(return_value="/exit")
         return con
 
     async def test_exits_immediately(self, mock_service, mock_console):
@@ -82,7 +82,7 @@ class TestRunConversation:
         self, mock_service, mock_console, seeded_session
     ):
         """Providing a session_id resumes the session and shows last 2 messages."""
-        mock_console.input.return_value = "exit"
+        mock_console.input.return_value = "/exit"
         await run_conversation(
             session_id=seeded_session.id,
             service=mock_service,
@@ -96,8 +96,7 @@ class TestRunConversation:
 
     async def test_default_model_from_config(self, mock_console):
         """When model_id is None, falls back to config.default_model."""
-        mock_console.input.return_value = "exit"
-
+        mock_console.input.return_value = "/exit"
         mock_provider = MagicMock()
 
         async def _invoke(model, messages, params=None):
@@ -126,7 +125,7 @@ class TestRunConversation:
 
     async def test_full_turn(self, mock_service, mock_console):
         """Sends a user message, receives an assistant reply, then exits."""
-        mock_console.input.side_effect = ["hello", "exit"]
+        mock_console.input.side_effect = ["hello", "/exit"]
 
         async def _stream(prompt, model=None):
             yield StreamDelta(content="Hi!", done=False)
@@ -146,6 +145,57 @@ class TestRunConversation:
         assert "Hi!" in output
         assert "Session titled: 'My Title'" in output
         mock_service.auto_title.assert_awaited_once()
+
+    async def test_empty_input_skipped(self, mock_service, mock_console):
+        """Empty input does not call stream_response."""
+        mock_console.input.side_effect = ["", "/exit"]
+        await run_conversation(
+            model_id="test-model",
+            service=mock_service,
+            console=mock_console,
+        )
+        mock_console.input.assert_called_with("[blue]> [/blue]")
+        output = mock_console.file.getvalue()
+        assert "Hi!" not in output
+
+    async def test_whitespace_input_skipped(self, mock_service, mock_console):
+        """Whitespace-only input does not call stream_response."""
+        mock_console.input.side_effect = ["   ", "/exit"]
+        await run_conversation(
+            model_id="test-model",
+            service=mock_service,
+            console=mock_console,
+        )
+        mock_console.input.assert_called_with("[blue]> [/blue]")
+        output = mock_console.file.getvalue()
+        assert "Hi!" not in output
+
+    async def test_eof_exits_cleanly(self, mock_service, mock_console):
+        """Ctrl+D (EOFError) exits the loop gracefully."""
+        mock_console.input.side_effect = EOFError
+        await run_conversation(
+            model_id="test-model",
+            service=mock_service,
+            console=mock_console,
+        )
+        mock_service.close.assert_awaited_once()
+
+    async def test_bare_exit_does_not_exit(self, mock_service, mock_console):
+        """Bare 'exit' (without slash) is sent to the LLM as a message."""
+        mock_console.input.side_effect = ["exit", "/exit"]
+
+        async def _stream(prompt, model=None):
+            yield StreamDelta(content="echo", done=False)
+            yield StreamDelta(content=None, done=True)
+
+        mock_service.stream_response = _stream
+        await run_conversation(
+            model_id="test-model",
+            service=mock_service,
+            console=mock_console,
+        )
+        output = mock_console.file.getvalue()
+        assert "echo" in output
 
 
 class TestSlashCommands:
@@ -196,7 +246,7 @@ class TestSlashCommands:
                 type=ModelType.LLM,
             )
         )
-        mock_console.input.side_effect = ["/model new-provider/new-model", "exit"]
+        mock_console.input.side_effect = ["/model new-provider/new-model", "/exit"]
         cfg = Config(default_model="old:old/model")
         await run_conversation(
             model_id="test-model",
@@ -213,7 +263,7 @@ class TestSlashCommands:
 
     async def test_slash_model_missing_arg(self, mock_service, mock_console):
         """'/model' with no arg shows usage."""
-        mock_console.input.side_effect = ["/model", "exit"]
+        mock_console.input.side_effect = ["/model", "/exit"]
         await run_conversation(
             model_id="test-model",
             service=mock_service,
@@ -226,7 +276,7 @@ class TestSlashCommands:
 
     async def test_slash_session(self, mock_service, mock_console):
         """'/session <id>' calls switch_session."""
-        mock_console.input.side_effect = ["/session other-session-id", "exit"]
+        mock_console.input.side_effect = ["/session other-session-id", "/exit"]
         await run_conversation(
             model_id="test-model",
             service=mock_service,
@@ -236,7 +286,7 @@ class TestSlashCommands:
 
     async def test_slash_session_missing_arg(self, mock_service, mock_console):
         """'/session' with no arg shows usage."""
-        mock_console.input.side_effect = ["/session", "exit"]
+        mock_console.input.side_effect = ["/session", "/exit"]
         await run_conversation(
             model_id="test-model",
             service=mock_service,
@@ -249,7 +299,7 @@ class TestSlashCommands:
 
     async def test_slash_help(self, mock_service, mock_console):
         """'/help' prints the command list."""
-        mock_console.input.side_effect = ["/help", "exit"]
+        mock_console.input.side_effect = ["/help", "/exit"]
         await run_conversation(
             model_id="test-model",
             service=mock_service,
@@ -263,7 +313,7 @@ class TestSlashCommands:
 
     async def test_slash_unknown(self, mock_service, mock_console):
         """Unknown slash command shows error."""
-        mock_console.input.side_effect = ["/bogus", "exit"]
+        mock_console.input.side_effect = ["/bogus", "/exit"]
         await run_conversation(
             model_id="test-model",
             service=mock_service,
@@ -305,7 +355,7 @@ class TestSlashSessions:
     ):
         """'/sessions' delegates to sessions.list_sessions()."""
         with patch("yapa.cli.sessions.list_sessions") as mock_list:
-            mock_console.input.side_effect = ["/sessions", "exit"]
+            mock_console.input.side_effect = ["/sessions", "/exit"]
             await run_conversation(
                 model_id="test-model",
                 service=mock_service,
