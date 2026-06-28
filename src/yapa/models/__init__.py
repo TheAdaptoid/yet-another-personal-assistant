@@ -1,24 +1,24 @@
 """Shared data models for the Yapa application."""
 
+from .base import TrackedEntity
 from .inference import InferenceParams, ModelData, ModelType, StreamDelta
 from .message import (
     AssistantMessage,
-    BaseMessage,
     Message,
     SystemMessage,
     UserMessage,
 )
-from .session import SessionSummary
+from .session import Session
 
 __all__ = [
     "AssistantMessage",
-    "BaseMessage",
     "InferenceParams",
     "Message",
     "SystemMessage",
     "UserMessage",
     "ModelData",
     "StreamDelta",
-    "SessionSummary",
     "ModelType",
+    "Session",
+    "TrackedEntity",
 ]

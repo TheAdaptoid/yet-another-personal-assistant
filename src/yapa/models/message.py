@@ -1,33 +1,21 @@
 """Data models for messages in the chat application."""
 
-from abc import ABC
-from datetime import datetime, timezone
 from typing import Annotated, Literal
-from uuid import uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import Field
+
+from .base import TrackedEntity
 
 
-class BaseMessage(ABC, BaseModel):
+class BaseMessage(TrackedEntity):
     """
     Base class for all message types.
 
     Attributes:
-        id (str): Unique identifier for the message, generated as a UUID4 hex string.
         role (Literal["user", "assistant", "system"]): The role of the message sender.
         content (str): The content of the message.
     """
 
-    id: str = Field(default_factory=lambda: uuid4().hex)
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-    )
-    updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        json_schema_extra={
-            "sa_column_kwargs": {"onupdate": lambda: datetime.now(timezone.utc)},
-        },
-    )
     role: Literal["user", "assistant", "system"]
     content: str
 
