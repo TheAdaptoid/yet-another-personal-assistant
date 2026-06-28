@@ -74,8 +74,14 @@ class SessionService:
 
         Returns:
             Session for the session.
+
+        Raises:
+            ValueError: If no session with the given ID is found.
         """
-        return self._store.load(session_id)
+        try:
+            return self._store.load(session_id)
+        except FileNotFoundError as e:
+            raise ValueError(str(e)) from e
 
     def rename(self, session_id: str, title: str) -> Session:
         """
@@ -87,8 +93,14 @@ class SessionService:
 
         Returns:
             Updated Session.
+
+        Raises:
+            ValueError: If no session with the given ID is found.
         """
-        session = self._store.load(session_id)
+        try:
+            session = self._store.load(session_id)
+        except FileNotFoundError as e:
+            raise ValueError(str(e)) from e
         session.title = title
         self._store.save(session, overwrite=True)
         return session
@@ -103,4 +115,7 @@ class SessionService:
         Raises:
             ValueError: If no session with the given ID is found.
         """
-        self._store.delete(session_id)
+        try:
+            self._store.delete(session_id)
+        except FileNotFoundError as e:
+            raise ValueError(str(e)) from e

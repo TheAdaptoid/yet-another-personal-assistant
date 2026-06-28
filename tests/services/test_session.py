@@ -42,7 +42,7 @@ class TestGetSession:
 
     def test_missing_session(self, tmp_path):
         service = SessionService(storage_dir=tmp_path)
-        with pytest.raises(FileNotFoundError, match="not found"):
+        with pytest.raises(ValueError, match="not found"):
             service.get_session("nonexistent")
 
 
@@ -107,7 +107,7 @@ class TestRename:
 
     def test_missing_session(self, tmp_path):
         service = SessionService(storage_dir=tmp_path)
-        with pytest.raises(FileNotFoundError, match="not found"):
+        with pytest.raises(ValueError, match="not found"):
             service.rename("nonexistent", "new title")
 
 
@@ -122,5 +122,5 @@ class TestDelete:
 
     def test_missing_session(self, tmp_path):
         service = SessionService(storage_dir=tmp_path)
-        with pytest.raises(FileNotFoundError, match="not found"):
+        with pytest.raises(ValueError, match="not found"):
             service.delete("nonexistent")

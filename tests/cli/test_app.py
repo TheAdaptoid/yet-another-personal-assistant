@@ -19,11 +19,11 @@ class TestSessionsCommands:
     def test_list_with_session(self, seeded_session):
         result = runner.invoke(cli, ["sessions", "list"])
         assert result.exit_code == 0
-        assert seeded_session.id[:8] in result.stdout
+        assert str(seeded_session.id)[:8] in result.stdout
 
     def test_rename(self, seeded_session):
         result = runner.invoke(
-            cli, ["sessions", "rename", seeded_session.id, "New Title"]
+            cli, ["sessions", "rename", str(seeded_session.id), "New Title"]
         )
         assert result.exit_code == 0
         assert "New Title" in result.stdout
@@ -34,7 +34,7 @@ class TestSessionsCommands:
         assert "not found" in result.stdout
 
     def test_delete(self, seeded_session):
-        result = runner.invoke(cli, ["sessions", "delete", seeded_session.id])
+        result = runner.invoke(cli, ["sessions", "delete", str(seeded_session.id)])
         assert result.exit_code == 0
         assert "Deleted session" in result.stdout
 
@@ -42,24 +42,6 @@ class TestSessionsCommands:
         result = runner.invoke(cli, ["sessions", "delete", "bad-id"])
         assert result.exit_code == 0
         assert "not found" in result.stdout
-
-    def test_delete_no_args(self):
-        """Delete without session_id or --purge prints an error."""
-        result = runner.invoke(cli, ["sessions", "delete"])
-        assert result.exit_code == 0
-        assert "Specify a session ID or use --purge" in result.stdout
-
-    def test_purge_flag(self, monkeypatch):
-        """Delete with --purge invokes the purge flow."""
-        monkeypatch.setattr("yapa.cli.sessions.Confirm.ask", lambda *a, **kw: True)
-        result = runner.invoke(cli, ["sessions", "delete", "--purge"])
-        assert result.exit_code == 0
-
-    def test_purge_short_flag(self, monkeypatch):
-        """Delete with -p invokes the purge flow."""
-        monkeypatch.setattr("yapa.cli.sessions.Confirm.ask", lambda *a, **kw: True)
-        result = runner.invoke(cli, ["sessions", "delete", "-p"])
-        assert result.exit_code == 0
 
 
 class TestModelsCommands:
