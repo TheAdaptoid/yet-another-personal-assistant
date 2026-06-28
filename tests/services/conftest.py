@@ -30,7 +30,7 @@ def mock_provider():
         yield StreamDelta(content="Hi!", reasoning_content=None, done=False)
         yield StreamDelta(content=None, reasoning_content=None, done=True)
 
-    provider.invoke_llm = _invoke
+    provider.invoke_llm_stream = _invoke
     provider.get_model = AsyncMock()
     return provider
 

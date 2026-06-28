@@ -146,7 +146,7 @@ class TestStreamResponse:
             raise ModelInvocationError("API error")
             yield  # pragma: no cover
 
-        provider.invoke_llm = _fail
+        provider.invoke_llm_stream = _fail
 
         service = ConversationService(
             provider_service=mock_provider_service, config=config, store=store
@@ -168,7 +168,7 @@ class TestStreamResponse:
         async def _empty(model, messages, params=None):
             yield StreamDelta(content=None, reasoning_content=None, done=True)
 
-        provider.invoke_llm = _empty
+        provider.invoke_llm_stream = _empty
 
         service = ConversationService(
             provider_service=mock_provider_service, config=config, store=store
@@ -194,7 +194,7 @@ class TestStreamResponse:
             yield StreamDelta(content=" world", reasoning_content=None, done=False)
             yield StreamDelta(content=None, reasoning_content=None, done=True)
 
-        provider.invoke_llm = _chunky
+        provider.invoke_llm_stream = _chunky
 
         service = ConversationService(
             provider_service=mock_provider_service, config=config, store=store
@@ -379,8 +379,7 @@ class TestGenerateTitle:
         provider = mock_provider_service.get_provider_by_model.return_value
 
         async def _response(model, messages, params=None):
-            yield StreamDelta(content="My Title", reasoning_content=None, done=False)
-            yield StreamDelta(content=None, reasoning_content=None, done=True)
+            return AssistantMessage(content="My Title", role="assistant")
 
         provider.invoke_llm = _response
 
@@ -399,8 +398,7 @@ class TestGenerateTitle:
         provider = mock_provider_service.get_provider_by_model.return_value
 
         async def _response(model, messages, params=None):
-            yield StreamDelta(content='"My Title"', reasoning_content=None, done=False)
-            yield StreamDelta(content=None, reasoning_content=None, done=True)
+            return AssistantMessage(content='"My Title"', role="assistant")
 
         provider.invoke_llm = _response
 
@@ -420,8 +418,7 @@ class TestGenerateTitle:
         provider = mock_provider_service.get_provider_by_model.return_value
 
         async def _response(model, messages, params=None):
-            yield StreamDelta(content=long_title, reasoning_content=None, done=False)
-            yield StreamDelta(content=None, reasoning_content=None, done=True)
+            return AssistantMessage(content=long_title, role="assistant")
 
         provider.invoke_llm = _response
 
@@ -443,7 +440,6 @@ class TestGenerateTitle:
 
         async def _fail(model, messages, params=None):
             raise ModelInvocationError("API error")
-            yield  # pragma: no cover
 
         provider.invoke_llm = _fail
 
@@ -473,7 +469,7 @@ class TestGenerateTitle:
         provider = mock_provider_service.get_provider_by_model.return_value
 
         async def _empty(model, messages, params=None):
-            yield StreamDelta(content=None, reasoning_content=None, done=True)
+            return AssistantMessage(content="", role="assistant")
 
         provider.invoke_llm = _empty
 
@@ -497,8 +493,7 @@ class TestGenerateTitle:
         async def _capture(model, messages, params=None):
             nonlocal captured_messages
             captured_messages = messages
-            yield StreamDelta(content="Title", reasoning_content=None, done=False)
-            yield StreamDelta(content=None, reasoning_content=None, done=True)
+            return AssistantMessage(content="Title", role="assistant")
 
         provider.invoke_llm = _capture
 
@@ -534,8 +529,7 @@ class TestAutoTitle:
         service._messages = [UserMessage(content="Hello world")]
 
         async def _response(model, messages, params=None):
-            yield StreamDelta(content="My Title", reasoning_content=None, done=False)
-            yield StreamDelta(content=None, reasoning_content=None, done=True)
+            return AssistantMessage(content="My Title", role="assistant")
 
         provider = mock_provider_service.get_provider_by_model.return_value
         provider.invoke_llm = _response
@@ -587,8 +581,7 @@ class TestAutoTitle:
         ]
 
         async def _response(model, messages, params=None):
-            yield StreamDelta(content="My Title", reasoning_content=None, done=False)
-            yield StreamDelta(content=None, reasoning_content=None, done=True)
+            return AssistantMessage(content="My Title", role="assistant")
 
         provider = mock_provider_service.get_provider_by_model.return_value
         provider.invoke_llm = _response
@@ -614,7 +607,7 @@ class TestAutoTitle:
         provider = mock_provider_service.get_provider_by_model.return_value
 
         async def _empty(model, messages, params=None):
-            yield StreamDelta(content=None, reasoning_content=None, done=True)
+            return AssistantMessage(content="", role="assistant")
 
         provider.invoke_llm = _empty
 
