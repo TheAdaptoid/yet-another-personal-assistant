@@ -8,7 +8,8 @@ from .message import (
     SystemMessage,
     UserMessage,
 )
-from .session import SessionSummary
+from .session import SessionSummary, Session
+from .base import TrackedEntity
 
 __all__ = [
     "AssistantMessage",
@@ -21,4 +22,6 @@ __all__ = [
     "StreamDelta",
     "SessionSummary",
     "ModelType",
+    "Session",
+    "TrackedEntity",
 ]
