@@ -48,10 +48,13 @@ class AssistantMessage(BaseMessage):
 
     Attributes:
         role (Literal["assistant"]): The role of the message sender, set to "assistant".
+        reasoning_content (str | None): Optional content that explains the reasoning
+            behind the assistant's response.
         model (str | None): The model identifier that generated this response.
     """
 
     role: Literal["assistant"] = "assistant"
+    reasoning_content: str | None = Field(default=None)
     model: str | None = Field(default=None)
 
 

@@ -183,17 +183,14 @@ class ConversationService:
         provider = self._ps.get_provider_by_model(self._model)
         system_msg = SystemMessage(content=TITLE_SYSTEM_PROMPT)
         user_msg = UserMessage(content=user_prompt)
-        buffer = ""
         try:
-            async for delta in provider.invoke_llm(
+            ast_msg = await provider.invoke_llm(
                 model=self._model,
                 messages=[system_msg, user_msg],
-            ):
-                if delta.content:
-                    buffer += delta.content
+            )
         except ModelInvocationError:
             return None
-        title = buffer.strip().strip('"').strip("'").strip()
+        title = ast_msg.content.strip().strip('"').strip("'").strip()
         return title[:60] if title else None
 
     async def auto_title(self) -> str | None:
@@ -241,24 +238,31 @@ class ConversationService:
 
         user_msg = UserMessage(content=prompt)
         provider = self._ps.get_provider_by_model(self._model)
-        buffer = ""
+        content_buffer = ""
+        reasoning_buffer = ""
 
         try:
-            async for delta in provider.invoke_llm(
+            async for delta in provider.invoke_llm_stream(
                 model=self._model,
                 messages=[*self._messages, user_msg],
             ):
                 if delta.content:
-                    buffer += delta.content
+                    content_buffer += delta.content
+                if delta.reasoning_content:
+                    reasoning_buffer += delta.reasoning_content
                 if not delta.done:
                     yield delta
         except ModelInvocationError as e:
             raise ConversationError("Model invocation failed") from e
 
-        if not buffer:
+        if not content_buffer:
             raise ConversationError("Model returned empty response")
 
-        assistant_msg = AssistantMessage(content=buffer, model=self._model.id)
+        assistant_msg = AssistantMessage(
+            content=content_buffer,
+            reasoning_content=reasoning_buffer,
+            model=self._model.id,
+        )
         self._save_message(user_msg)
         self._save_message(assistant_msg)
 
