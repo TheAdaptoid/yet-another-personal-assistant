@@ -1,6 +1,6 @@
 """Base classes for data models within the application."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
@@ -17,9 +17,9 @@ class TrackedEntity(BaseModel):
     """
 
     id: UUID = Field(default_factory=uuid4)
-    created_at: datetime = Field(default_factory=datetime.now)
-    updated_at: datetime = Field(default_factory=datetime.now)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     def touch(self):
         """Update the `updated_at` timestamp."""
-        self.updated_at = datetime.now()
+        self.updated_at = datetime.now(timezone.utc)
