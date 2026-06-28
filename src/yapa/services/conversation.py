@@ -2,19 +2,20 @@
 
 from collections.abc import AsyncGenerator
 from typing import Self
+from uuid import UUID
 
 from yapa.config import Config, get_config
-from yapa.database.repositories import SessionRepository
 from yapa.models import (
     AssistantMessage,
     Message,
     ModelData,
-    SessionSummary,
+    Session,
     StreamDelta,
     SystemMessage,
     UserMessage,
 )
 from yapa.providers.exceptions import ModelInvocationError
+from yapa.storage import GenericStore
 
 from .exceptions import ConversationError
 from .provider import ProviderService
@@ -33,7 +34,7 @@ class ConversationService:
         self,
         provider_service: ProviderService | None = None,
         config: Config | None = None,
-        session_repo: SessionRepository | None = None,
+        store: GenericStore[Session] | None = None,
     ) -> None:
         """
         Initialize a new conversation service.
@@ -42,13 +43,16 @@ class ConversationService:
             provider_service: Provider service instance. Defaults to fresh
                 ProviderService.
             config: Application config. Defaults to get_config().
-            session_repo: Session repository. Defaults to a fresh
-                SessionRepository using the global database engine.
+            store: Session store. Defaults to a GenericStore[Session] at
+                {storage_dir}/sessions.
         """
         self._ps = provider_service or ProviderService()
         self._cfg = config or get_config()
-        self._session_repo = session_repo or SessionRepository()
-        self._session_id: str | None = None
+        self._store = store or GenericStore[Session](
+            storage_dir=self._cfg.storage_dir / "sessions",
+            entity_type=Session,
+        )
+        self._session_id: UUID | None = None
         self._model: ModelData | None = None
         self._messages: list[Message] = []
 
@@ -58,7 +62,7 @@ class ConversationService:
         return list(self._messages)
 
     @property
-    def session_id(self) -> str | None:
+    def session_id(self) -> UUID | None:
         """Current session ID, or None if no session has been started."""
         return self._session_id
 
@@ -92,13 +96,15 @@ class ConversationService:
         if not self._session_id:
             raise ConversationError("No active session to save message to")
         self._messages.append(message)
-        self._session_repo.add_message(self._session_id, message)
+        session = self._store.load(str(self._session_id))
+        session.messages.append(message)
+        self._store.save(session, overwrite=True)
 
     async def start(
         self,
-        session_id: str | None = None,
+        session_id: UUID | None = None,
         model: ModelData | None = None,
-    ) -> SessionSummary:
+    ) -> Session:
         """
         Resolve provider and load or create a session.
 
@@ -108,27 +114,24 @@ class ConversationService:
                 the default model from config is used.
 
         Returns:
-            SessionSummary describing the active session.
+            The active Session.
         """
         if session_id:
-            session = self._session_repo.get(session_id)
-            table_messages = self._session_repo.get_messages(session_id)
-            self._messages = [m.to_pydantic() for m in table_messages]
+            session = self._store.load(str(session_id))
+            self._messages = list(session.messages)
         else:
-            session = self._session_repo.create()
+            session = Session()
+            self._store.save(session)
             self._messages = []
 
         self._session_id = session.id
 
         if self._model is None:
-            if model:
-                self._model = model
-            else:
-                self._model = await self._ps.get_model(self._cfg.default_model)
+            self._model = model or await self._ps.get_model(self._cfg.default_model)
 
-        return session.to_summary()
+        return session
 
-    def switch_session(self, session_id: str) -> SessionSummary:
+    def switch_session(self, session_id: UUID) -> Session:
         """
         Switch to a different session without resetting the model.
 
@@ -136,16 +139,15 @@ class ConversationService:
             session_id: ID of the session to switch to.
 
         Returns:
-            SessionSummary for the newly active session.
+            Session for the newly active session.
 
         Raises:
             ValueError: If session_id is not found.
         """
-        session = self._session_repo.get(session_id)
-        table_messages = self._session_repo.get_messages(session_id)
-        self._messages = [m.to_pydantic() for m in table_messages]
+        session = self._store.load(str(session_id))
+        self._messages = list(session.messages)
         self._session_id = session.id
-        return session.to_summary()
+        return session
 
     async def close(self) -> None:
         """Clear in-memory state and mark the service as closed."""
@@ -202,7 +204,9 @@ class ConversationService:
             if msg.role == "user":
                 title = await self.generate_title(msg.content)
                 if title:
-                    self._session_repo.rename(self._session_id, title)
+                    session = self._store.load(str(self._session_id))
+                    session.title = title
+                    self._store.save(session, overwrite=True)
                 return title
         return None
 

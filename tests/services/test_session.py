@@ -1,147 +1,126 @@
 """Tests for SessionService."""
 
+import time
+from datetime import datetime, timezone
+
 import pytest
 
-from yapa.models import AssistantMessage, UserMessage
 from yapa.services import SessionService
-
-
-class TestListAll:
-    """Tests for SessionService.list_all()."""
-
-    def test_empty_when_no_sessions(self, repo):
-        service = SessionService(session_repo=repo)
-        assert service.list_all() == []
-
-    def test_returns_summaries_ordered_by_updated_at(self, repo):
-        service = SessionService(session_repo=repo)
-        s1 = repo.create(title="old")
-        s2 = repo.create(title="newer")
-        s3 = repo.create(title="newest")
-
-        summaries = service.list_all()
-        assert [s.id for s in summaries] == [s3.id, s2.id, s1.id]
-
-    def test_summary_fields_match_session(self, repo):
-        service = SessionService(session_repo=repo)
-        created = repo.create(title="My Chat")
-
-        summaries = service.list_all()
-        assert len(summaries) == 1
-        s = summaries[0]
-        assert s.id == created.id
-        assert s.title == "My Chat"
-        assert s.created_at == created.created_at
-        assert s.updated_at == created.updated_at
-
-
-class TestGet:
-    """Tests for SessionService.get()."""
-
-    def test_returns_summary(self, repo):
-        service = SessionService(session_repo=repo)
-        created = repo.create(title="test")
-        summary = service.get(created.id)
-        assert summary.id == created.id
-        assert summary.title == "test"
-
-    def test_raises_value_error_for_missing(self, repo):
-        service = SessionService(session_repo=repo)
-        with pytest.raises(ValueError, match="not found"):
-            service.get("nonexistent")
-
-
-class TestGetMessages:
-    """Tests for SessionService.get_messages()."""
-
-    def test_returns_pydantic_messages(self, repo):
-        service = SessionService(session_repo=repo)
-        session = repo.create()
-        repo.add_message(session.id, UserMessage(content="hello"))
-        repo.add_message(session.id, AssistantMessage(content="hi", model="m"))
-
-        messages = service.get_messages(session.id)
-        assert len(messages) == 2
-        assert isinstance(messages[0], UserMessage)
-        assert messages[0].content == "hello"
-        assert isinstance(messages[1], AssistantMessage)
-        assert messages[1].content == "hi"
-        assert messages[1].model == "m"
-
-    def test_raises_value_error_for_missing_session(self, repo):
-        service = SessionService(session_repo=repo)
-        with pytest.raises(ValueError, match="not found"):
-            service.get_messages("nonexistent")
 
 
 class TestCreate:
     """Tests for SessionService.create()."""
 
-    def test_returns_summary_with_default_title(self, repo):
-        service = SessionService(session_repo=repo)
-        summary = service.create()
-        assert summary.title == "New Session"
-        assert summary.id is not None
+    def test_default_title(self, tmp_path):
+        service = SessionService(storage_dir=tmp_path)
+        session = service.create()
+        assert session.title == "Untitled Session"
+        assert session.id is not None
 
-    def test_returns_summary_with_custom_title(self, repo):
-        service = SessionService(session_repo=repo)
-        summary = service.create(title="Custom")
-        assert summary.title == "Custom"
+    def test_custom_title(self, tmp_path):
+        service = SessionService(storage_dir=tmp_path)
+        session = service.create(title="My Chat")
+        assert session.title == "My Chat"
+
+    def test_persists_to_disk(self, tmp_path):
+        service = SessionService(storage_dir=tmp_path)
+        session = service.create(title="persist")
+        loaded = service.get_session(str(session.id))
+        assert loaded.id == session.id
+        assert loaded.title == "persist"
+
+
+class TestGetSession:
+    """Tests for SessionService.get_session()."""
+
+    def test_returns_session(self, tmp_path):
+        service = SessionService(storage_dir=tmp_path)
+        created = service.create(title="test")
+        loaded = service.get_session(str(created.id))
+        assert loaded.id == created.id
+        assert loaded.title == "test"
+
+    def test_missing_session(self, tmp_path):
+        service = SessionService(storage_dir=tmp_path)
+        with pytest.raises(FileNotFoundError, match="not found"):
+            service.get_session("nonexistent")
+
+
+class TestListSessions:
+    """Tests for SessionService.list_sessions()."""
+
+    def test_empty_when_no_sessions(self, tmp_path):
+        service = SessionService(storage_dir=tmp_path)
+        assert service.list_sessions() == []
+
+    def test_ordered_newest_first(self, tmp_path):
+        service = SessionService(storage_dir=tmp_path)
+        s1 = service.create(title="old")
+        s2 = service.create(title="newer")
+        s3 = service.create(title="newest")
+
+        sessions = service.list_sessions()
+        assert [s.id for s in sessions] == [s3.id, s2.id, s1.id]
+
+    def test_min_date_filter(self, tmp_path):
+        service = SessionService(storage_dir=tmp_path)
+        service.create(title="old")
+        time.sleep(0.005)
+        cutoff = datetime.now(timezone.utc)
+        s2 = service.create(title="new")
+        sessions = service.list_sessions(min_date=cutoff)
+        assert sessions == [s2]
+
+    def test_max_date_filter(self, tmp_path):
+        service = SessionService(storage_dir=tmp_path)
+        s1 = service.create(title="old")
+        cutoff = datetime.now(timezone.utc)
+        time.sleep(0.005)
+        service.create(title="new")
+        sessions = service.list_sessions(max_date=cutoff)
+        assert sessions == [s1]
+
+    def test_oldest_first_flag(self, tmp_path):
+        service = SessionService(storage_dir=tmp_path)
+        s1 = service.create(title="old")
+        s2 = service.create(title="new")
+        sessions = service.list_sessions(newest_first=False)
+        assert [s.id for s in sessions] == [s1.id, s2.id]
 
 
 class TestRename:
     """Tests for SessionService.rename()."""
 
-    def test_updates_title(self, repo):
-        service = SessionService(session_repo=repo)
-        summary = service.create(title="old")
-        updated = service.rename(summary.id, "new")
+    def test_updates_title(self, tmp_path):
+        service = SessionService(storage_dir=tmp_path)
+        session = service.create(title="old")
+        updated = service.rename(str(session.id), "new")
         assert updated.title == "new"
-        assert updated.id == summary.id
+        assert updated.id == session.id
 
-    def test_raises_value_error_for_missing(self, repo):
-        service = SessionService(session_repo=repo)
-        with pytest.raises(ValueError, match="not found"):
+    def test_persists_rename(self, tmp_path):
+        service = SessionService(storage_dir=tmp_path)
+        session = service.create(title="old")
+        service.rename(str(session.id), "persisted")
+        loaded = service.get_session(str(session.id))
+        assert loaded.title == "persisted"
+
+    def test_missing_session(self, tmp_path):
+        service = SessionService(storage_dir=tmp_path)
+        with pytest.raises(FileNotFoundError, match="not found"):
             service.rename("nonexistent", "new title")
 
 
 class TestDelete:
     """Tests for SessionService.delete()."""
 
-    def test_removes_session(self, repo):
-        service = SessionService(session_repo=repo)
-        summary = service.create()
-        service.delete(summary.id)
-        assert service.list_all() == []
+    def test_removes_session(self, tmp_path):
+        service = SessionService(storage_dir=tmp_path)
+        session = service.create()
+        service.delete(str(session.id))
+        assert service.list_sessions() == []
 
-    def test_raises_value_error_for_missing(self, repo):
-        service = SessionService(session_repo=repo)
-        with pytest.raises(ValueError, match="not found"):
+    def test_missing_session(self, tmp_path):
+        service = SessionService(storage_dir=tmp_path)
+        with pytest.raises(FileNotFoundError, match="not found"):
             service.delete("nonexistent")
-
-
-class TestPurge:
-    """Tests for SessionService.purge()."""
-
-    def test_removes_sessions_with_fewer_than_2_messages(self, repo):
-        svc = SessionService(session_repo=repo)
-        empty = repo.create()
-        single = repo.create()
-        repo.add_message(single.id, UserMessage(content="hi"))
-        keep = repo.create()
-        repo.add_message(keep.id, UserMessage(content="a"))
-        repo.add_message(keep.id, AssistantMessage(content="b", model="m"))
-
-        purged = svc.purge()
-
-        assert len(purged) == 2
-        assert empty.id in purged
-        assert single.id in purged
-        assert repo.get(keep.id)
-
-    def test_returns_empty_list_when_nothing_to_purge(self, repo):
-        svc = SessionService(session_repo=repo)
-        s = repo.create()
-        repo.add_message(s.id, UserMessage(content="a"))
-        repo.add_message(s.id, AssistantMessage(content="b", model="m"))
-        assert svc.purge() == []

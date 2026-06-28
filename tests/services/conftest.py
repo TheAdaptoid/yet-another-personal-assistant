@@ -1,34 +1,25 @@
 """Test fixtures for service-layer tests."""
 
-from __future__ import annotations
-
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from sqlalchemy import create_engine
-from sqlmodel import SQLModel
 
 from yapa.config import Config
-from yapa.database.repositories import SessionRepository
-from yapa.models import ModelData, ModelType, StreamDelta
+from yapa.models import ModelData, ModelType, Session, StreamDelta
+from yapa.storage import GenericStore
 
 
 @pytest.fixture
-def engine():
-    e = create_engine("sqlite://", echo=False)
-    SQLModel.metadata.create_all(e)
-    yield e
-    e.dispose()
+def config(tmp_path):
+    return Config(default_model="test:test-default-model", storage_dir=tmp_path)
 
 
 @pytest.fixture
-def repo(engine):
-    return SessionRepository(engine=engine)
-
-
-@pytest.fixture
-def config():
-    return Config(default_model="test:test-default-model")
+def store(config):
+    return GenericStore[Session](
+        storage_dir=config.storage_dir / "sessions",
+        entity_type=Session,
+    )
 
 
 @pytest.fixture
