@@ -39,7 +39,7 @@ def mock_model_invoker() -> MagicMock:
         yield StreamDelta(content="Hello", reasoning_content=None, done=False)
         yield StreamDelta(content=None, reasoning_content=None, done=True)
 
-    invoker.invoke_llm = _invoke
+    invoker.invoke_llm_stream = _invoke
     return invoker
 
 

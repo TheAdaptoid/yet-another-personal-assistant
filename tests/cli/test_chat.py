@@ -106,7 +106,7 @@ class TestRunConversation:
         async def _invoke(model, messages, params=None):
             yield StreamDelta(content=None, reasoning_content=None, done=True)
 
-        mock_provider.invoke_llm = _invoke
+        mock_provider.invoke_llm_stream = _invoke
 
         ps = MagicMock()
         ps.get_model = AsyncMock(
