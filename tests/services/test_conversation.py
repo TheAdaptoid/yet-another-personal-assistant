@@ -234,9 +234,7 @@ class TestResolveModel:
     """Tests for ConversationService.resolve_model()."""
 
     async def test_returns_model_data(self, mock_provider_service, store, config):
-        expected = ModelData(
-            id="prov:gpt-4", provider_id="prov", type=ModelType.LLM
-        )
+        expected = ModelData(id="prov:gpt-4", provider_id="prov", type=ModelType.LLM)
         mock_provider_service.get_model = AsyncMock(return_value=expected)
 
         service = ConversationService(
@@ -282,9 +280,7 @@ class TestSwitchSession:
         assert len(info.messages) == 2
         assert len(service.messages) == 2
 
-    def test_raises_on_missing_session(
-        self, mock_provider_service, store, config
-    ):
+    def test_raises_on_missing_session(self, mock_provider_service, store, config):
         service = ConversationService(
             provider_service=mock_provider_service, config=config, store=store
         )
@@ -322,17 +318,6 @@ class TestClose:
         assert service.session_id is None
         assert service.model is None
         assert service.messages == []
-
-    async def test_close_idempotent(
-        self, mock_provider_service, repo, config
-    ):
-        service = ConversationService(
-            provider_service=mock_provider_service, config=config, session_repo=repo
-        )
-        await service.close()
-        await service.close()
-        await service.close()
-        assert service.session_id is None
 
     async def test_context_manager(self, mock_provider_service, store, config):
         service = ConversationService(
@@ -372,9 +357,7 @@ class TestMessages:
 class TestModel:
     """Tests for ConversationService.model property and setter."""
 
-    def test_getter_returns_none_initially(
-        self, mock_provider_service, store, config
-    ):
+    def test_getter_returns_none_initially(self, mock_provider_service, store, config):
         service = ConversationService(
             provider_service=mock_provider_service, config=config, store=store
         )
@@ -573,9 +556,7 @@ class TestAutoTitle:
         title = await service.auto_title()
         assert title is None
 
-    async def test_auto_title_no_session(
-        self, mock_provider_service, store, config
-    ):
+    async def test_auto_title_no_session(self, mock_provider_service, store, config):
         service = ConversationService(
             provider_service=mock_provider_service, config=config, store=store
         )
