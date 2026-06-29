@@ -313,6 +313,23 @@ class TestClose:
         service = ConversationService(
             provider_service=mock_provider_service, config=config, store=store
         )
+        await service.start()
+        assert service.session_id is not None
+        assert service.model is not None
+
+        await service.close()
+
+        assert service.session_id is None
+        assert service.model is None
+        assert service.messages == []
+
+    async def test_close_idempotent(
+        self, mock_provider_service, repo, config
+    ):
+        service = ConversationService(
+            provider_service=mock_provider_service, config=config, session_repo=repo
+        )
+        await service.close()
         await service.close()
         await service.close()
         assert service.session_id is None

@@ -30,6 +30,7 @@ async def _handle_slash_command(
     con: Console,
 ) -> Session | None:
     """Handle a parsed slash command. Returns new Session if /session."""
+
     if cmd == "help":
         con.print(_HELP_TEXT)
     elif cmd == "sessions":
