@@ -4,7 +4,13 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from yapa.models import InferenceParams, ModelData, ModelType, StreamDelta
+from yapa.models import (
+    AssistantMessage,
+    InferenceParams,
+    ModelData,
+    ModelType,
+    StreamDelta,
+)
 from yapa.providers.exceptions import ModelInvocationError, ModelsFetchError
 
 
@@ -86,8 +92,8 @@ class TestGetModel:
         assert exc_info.value.__cause__ is api_error
 
 
-class TestInvokeLlm:
-    """Tests for InferenceProvider.invoke_llm()."""
+class TestInvokeLlmStream:
+    """Tests for InferenceProvider.invoke_llm_stream()."""
 
     async def test_raises_error_on_non_llm_model(
         self, provider, sample_messages
@@ -96,14 +102,14 @@ class TestInvokeLlm:
             id="text-embedding-3", provider_id="test_prov", type=ModelType.OTHER
         )
         with pytest.raises(ModelInvocationError, match="not an LLM"):
-            async for _ in provider.invoke_llm(model, sample_messages):
+            async for _ in provider.invoke_llm_stream(model, sample_messages):
                 pass
 
     async def test_streams_content_from_invoker(
         self, provider, mock_model_invoker, sample_model, sample_messages
     ) -> None:
         results: list[StreamDelta] = []
-        async for chunk in provider.invoke_llm(sample_model, sample_messages):
+        async for chunk in provider.invoke_llm_stream(sample_model, sample_messages):
             results.append(chunk)
 
         assert results[0] == StreamDelta(
@@ -114,7 +120,7 @@ class TestInvokeLlm:
         self, provider, mock_model_invoker, sample_model, sample_messages
     ) -> None:
         results: list[StreamDelta] = []
-        async for chunk in provider.invoke_llm(sample_model, sample_messages):
+        async for chunk in provider.invoke_llm_stream(sample_model, sample_messages):
             results.append(chunk)
 
         assert results[-1] == StreamDelta(
@@ -132,9 +138,9 @@ class TestInvokeLlm:
             yield StreamDelta(content=None, done=False)
             yield StreamDelta(content=None, done=True)
 
-        mock_model_invoker.invoke_llm = _gen
+        mock_model_invoker.invoke_llm_stream = _gen
 
-        async for _ in provider.invoke_llm(sample_model, sample_messages):
+        async for _ in provider.invoke_llm_stream(sample_model, sample_messages):
             pass
 
         assert captured is not None
@@ -153,10 +159,10 @@ class TestInvokeLlm:
             yield StreamDelta(content=None, done=False)
             yield StreamDelta(content=None, done=True)
 
-        mock_model_invoker.invoke_llm = _gen
+        mock_model_invoker.invoke_llm_stream = _gen
         params = InferenceParams(temperature=0.7, max_tokens=100, top_p=0.9)
 
-        async for _ in provider.invoke_llm(
+        async for _ in provider.invoke_llm_stream(
             sample_model, sample_messages, params=params
         ):
             pass
@@ -175,11 +181,62 @@ class TestInvokeLlm:
             raise api_error
             yield  # pragma: no cover
 
-        mock_model_invoker.invoke_llm = _fail
+        mock_model_invoker.invoke_llm_stream = _fail
 
         with pytest.raises(ModelInvocationError) as exc_info:
-            async for _ in provider.invoke_llm(sample_model, sample_messages):
+            async for _ in provider.invoke_llm_stream(sample_model, sample_messages):
                 pass
 
         assert "stream failed" in str(exc_info.value)
+        assert exc_info.value.__cause__ is api_error
+
+
+class TestInvokeLlm:
+    """Tests for InferenceProvider.invoke_llm() (non-streaming)."""
+
+    async def test_raises_error_on_non_llm_model(
+        self, provider, sample_messages
+    ) -> None:
+        model = ModelData(
+            id="text-embedding-3", provider_id="test_prov", type=ModelType.OTHER
+        )
+        with pytest.raises(ModelInvocationError, match="not an LLM"):
+            await provider.invoke_llm(model, sample_messages)
+
+    async def test_returns_assistant_message(
+        self, provider, mock_model_invoker, sample_model, sample_messages
+    ) -> None:
+        expected = AssistantMessage(content="Hello", role="assistant")
+        mock_model_invoker.invoke_llm = AsyncMock(return_value=expected)
+
+        result = await provider.invoke_llm(sample_model, sample_messages)
+
+        assert result == expected
+
+    async def test_passes_model_id_messages_and_params(
+        self, provider, mock_model_invoker, sample_model, sample_messages
+    ) -> None:
+        mock_model_invoker.invoke_llm = AsyncMock(
+            return_value=AssistantMessage(content="ok", role="assistant")
+        )
+        params = InferenceParams(temperature=0.7, max_tokens=100, top_p=0.9)
+
+        await provider.invoke_llm(sample_model, sample_messages, params=params)
+
+        mock_model_invoker.invoke_llm.assert_awaited_once_with(
+            model_id=sample_model.id,
+            messages=sample_messages,
+            params=params,
+        )
+
+    async def test_raises_model_invocation_error_on_failure(
+        self, provider, mock_model_invoker, sample_model, sample_messages
+    ) -> None:
+        api_error = Exception("invocation failed")
+        mock_model_invoker.invoke_llm = AsyncMock(side_effect=api_error)
+
+        with pytest.raises(ModelInvocationError) as exc_info:
+            await provider.invoke_llm(sample_model, sample_messages)
+
+        assert "invocation failed" in str(exc_info.value)
         assert exc_info.value.__cause__ is api_error

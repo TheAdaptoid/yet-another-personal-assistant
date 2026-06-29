@@ -1,65 +1,30 @@
 """Session management service — UI-agnostic session CRUD and listing."""
 
-from yapa.database import SessionRepository, SessionTable
-from yapa.models import Message, SessionSummary
+from datetime import datetime
+from pathlib import Path
+
+from yapa.config import get_config
+from yapa.models import Session
+from yapa.storage import GenericStore
 
 
 class SessionService:
     """Service for session CRUD and listing, agnostic of UI framework."""
 
-    def __init__(self, session_repo: SessionRepository | None = None) -> None:
+    def __init__(self, storage_dir: Path | None = None) -> None:
         """
         Initialize a new session service.
 
         Args:
-            session_repo: Session repository. Defaults to a fresh
-                SessionRepository using the global database engine.
+            storage_dir: The directory to store the sessions in. If None, the
+                default storage directory is used.
         """
-        self._repo = session_repo or SessionRepository()
+        self._store = GenericStore[Session](
+            storage_dir=storage_dir or get_config().storage_dir / "sessions",
+            entity_type=Session,
+        )
 
-    def list_all(self) -> list[SessionSummary]:
-        """
-        List all sessions ordered by most recently updated.
-
-        Returns:
-            list of SessionSummary for every session.
-        """
-        sessions = self._repo.list_all()
-        sessions.sort(key=lambda s: s.updated_at, reverse=True)
-        return [self._to_summary(s) for s in sessions]
-
-    def get(self, session_id: str) -> SessionSummary:
-        """
-        Get a single session's summary.
-
-        Args:
-            session_id: The session ID.
-
-        Returns:
-            SessionSummary for the session.
-
-        Raises:
-            ValueError: If no session with the given ID is found.
-        """
-        return self._to_summary(self._repo.get(session_id))
-
-    def get_messages(self, session_id: str) -> list[Message]:
-        """
-        Get all messages for a session as Pydantic models.
-
-        Args:
-            session_id: The session ID.
-
-        Returns:
-            list of Message (UserMessage, AssistantMessage, SystemMessage).
-
-        Raises:
-            ValueError: If no session with the given ID is found.
-        """
-        table_messages = self._repo.get_messages(session_id)
-        return [m.to_pydantic() for m in table_messages]
-
-    def create(self, title: str | None = None) -> SessionSummary:
+    def create(self, title: str | None = None) -> Session:
         """
         Create a new session.
 
@@ -67,11 +32,58 @@ class SessionService:
             title: Optional title. Defaults to "New Session".
 
         Returns:
-            SessionSummary for the new session.
+            The new session.
         """
-        return self._to_summary(self._repo.create(title=title))
+        session = Session()
+        if title:
+            session.title = title
+        self._store.save(session)
+        return session
 
-    def rename(self, session_id: str, title: str) -> SessionSummary:
+    def list_sessions(
+        self,
+        *,
+        min_date: datetime | None = None,
+        max_date: datetime | None = None,
+        newest_first: bool = True,
+    ) -> list[Session]:
+        """
+        List all sessions ordered by most recently updated.
+
+        Newest sessions first.
+
+        Returns:
+            A list of all sessions
+        """
+        sessions = self._store.list()
+
+        if min_date:
+            sessions = [s for s in sessions if s.updated_at >= min_date]
+        if max_date:
+            sessions = [s for s in sessions if s.updated_at <= max_date]
+
+        sessions.sort(key=lambda s: s.updated_at, reverse=newest_first)
+        return sessions
+
+    def get_session(self, session_id: str) -> Session:
+        """
+        Retrieve a session.
+
+        Args:
+            session_id: The session ID.
+
+        Returns:
+            Session for the session.
+
+        Raises:
+            ValueError: If no session with the given ID is found.
+        """
+        try:
+            return self._store.load(session_id)
+        except FileNotFoundError as e:
+            raise ValueError(str(e)) from e
+
+    def rename(self, session_id: str, title: str) -> Session:
         """
         Rename a session.
 
@@ -80,12 +92,18 @@ class SessionService:
             title: New title.
 
         Returns:
-            Updated SessionSummary.
+            Updated Session.
 
         Raises:
             ValueError: If no session with the given ID is found.
         """
-        return self._to_summary(self._repo.rename(session_id, title))
+        try:
+            session = self._store.load(session_id)
+        except FileNotFoundError as e:
+            raise ValueError(str(e)) from e
+        session.title = title
+        self._store.save(session, overwrite=True)
+        return session
 
     def delete(self, session_id: str) -> None:
         """
@@ -97,28 +115,7 @@ class SessionService:
         Raises:
             ValueError: If no session with the given ID is found.
         """
-        self._repo.delete(session_id)
-
-    def purge(self, min_messages: int = 2) -> list[str]:
-        """
-        Delete all sessions with fewer than *min_messages* messages.
-
-        Args:
-            min_messages: Minimum number of messages for a session to
-                survive. Defaults to 2.
-
-        Returns:
-            list of session IDs that were deleted.
-        """
-        return self._repo.purge(min_messages=min_messages)
-
-    @staticmethod
-    def _to_summary(table: SessionTable) -> SessionSummary:
-        """Convert a SessionTable to a SessionSummary."""
-        return SessionSummary(
-            id=table.id,
-            title=table.title,
-            created_at=table.created_at,
-            updated_at=table.updated_at,
-            message_count=len(table.messages) if table.messages else 0,
-        )
+        try:
+            self._store.delete(session_id)
+        except FileNotFoundError as e:
+            raise ValueError(str(e)) from e

@@ -5,7 +5,13 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from yapa.models import InferenceParams, ModelData, ModelType, StreamDelta
+from yapa.models import (
+    AssistantMessage,
+    InferenceParams,
+    ModelData,
+    ModelType,
+    StreamDelta,
+)
 from yapa.providers.protocols.openai import (
     OpenAIInferenceProtocol,
     OpenAIModelFetchProtocol,
@@ -139,7 +145,7 @@ class TestOpenAIInferenceProtocol:
         mock_client.chat.completions.create = AsyncMock(return_value=stream)
 
         results: list[StreamDelta] = []
-        async for delta in protocol.invoke_llm(
+        async for delta in protocol.invoke_llm_stream(
             model_id="gpt-4", messages=[_msg("user", "hi")]
         ):
             results.append(delta)
@@ -149,7 +155,7 @@ class TestOpenAIInferenceProtocol:
             StreamDelta(content=" world", reasoning_content=None, done=False),
         ]
 
-    async def test_invoke_llm_uses_reasoning_content(
+    async def test_invoke_llm_stream_uses_reasoning_content(
         self, protocol, mock_client
     ) -> None:
         stream = _stream(
@@ -158,7 +164,7 @@ class TestOpenAIInferenceProtocol:
         mock_client.chat.completions.create = AsyncMock(return_value=stream)
 
         results: list[StreamDelta] = []
-        async for delta in protocol.invoke_llm(
+        async for delta in protocol.invoke_llm_stream(
             model_id="gpt-4", messages=[_msg("user", "hi")]
         ):
             results.append(delta)
@@ -167,7 +173,7 @@ class TestOpenAIInferenceProtocol:
             content=None, reasoning_content="thinking...", done=False
         )
 
-    async def test_invoke_llm_falls_back_to_reasoning(
+    async def test_invoke_llm_stream_falls_back_to_reasoning(
         self, protocol, mock_client
     ) -> None:
         stream = _stream(
@@ -176,7 +182,7 @@ class TestOpenAIInferenceProtocol:
         mock_client.chat.completions.create = AsyncMock(return_value=stream)
 
         results: list[StreamDelta] = []
-        async for delta in protocol.invoke_llm(
+        async for delta in protocol.invoke_llm_stream(
             model_id="gpt-4", messages=[_msg("user", "hi")]
         ):
             results.append(delta)
@@ -185,7 +191,7 @@ class TestOpenAIInferenceProtocol:
             content="answer", reasoning_content=None, done=False
         )
 
-    async def test_invoke_llm_uses_reasoning_fallback(
+    async def test_invoke_llm_stream_uses_reasoning_fallback(
         self, protocol, mock_client
     ) -> None:
         stream = _stream(
@@ -194,7 +200,7 @@ class TestOpenAIInferenceProtocol:
         mock_client.chat.completions.create = AsyncMock(return_value=stream)
 
         results: list[StreamDelta] = []
-        async for delta in protocol.invoke_llm(
+        async for delta in protocol.invoke_llm_stream(
             model_id="gpt-4", messages=[_msg("user", "hi")]
         ):
             results.append(delta)
@@ -203,13 +209,13 @@ class TestOpenAIInferenceProtocol:
             content="answer", reasoning_content="thinking...", done=False
         )
 
-    async def test_passes_params_to_create(self, protocol, mock_client):
+    async def test_passes_params_to_stream_create(self, protocol, mock_client):
         stream = _stream(_chunk(content="ok", reasoning_content=None))
         mock_create = AsyncMock(return_value=stream)
         mock_client.chat.completions.create = mock_create
         params = InferenceParams(temperature=0.7, max_tokens=100, top_p=0.9)
 
-        async for _ in protocol.invoke_llm(
+        async for _ in protocol.invoke_llm_stream(
             model_id="gpt-4",
             messages=[_msg("user", "hi")],
             params=params,
@@ -231,7 +237,7 @@ class TestOpenAIInferenceProtocol:
         mock_create = AsyncMock(return_value=stream)
         mock_client.chat.completions.create = mock_create
 
-        async for _ in protocol.invoke_llm(
+        async for _ in protocol.invoke_llm_stream(
             model_id="gpt-4",
             messages=[_msg("user", "hi")],
         ):
@@ -266,6 +272,130 @@ class TestOpenAIInferenceProtocol:
         msg = _msg("unknown", "foo")
         with pytest.raises(ValueError, match="Unsupported message role"):
             protocol._format_message(msg)
+
+
+class TestOpenAIInferenceProtocolNonStreaming:
+    """Tests for OpenAIInferenceProtocol.invoke_llm() (non-streaming)."""
+
+    @pytest.fixture
+    def protocol(self):
+        client = MagicMock()
+        return OpenAIInferenceProtocol(client=client)
+
+    @pytest.fixture
+    def mock_client(self, protocol):
+        return protocol.client
+
+    def _make_response(self, content="Hello", reasoning_content=None):
+        """Build a mock OpenAI non-streaming response."""
+        message = SimpleNamespace(
+            content=content,
+            reasoning_content=reasoning_content,
+        )
+        choice = SimpleNamespace(message=message)
+        return SimpleNamespace(choices=[choice])
+
+    async def test_invoke_llm_returns_assistant_message(
+        self, protocol, mock_client
+    ) -> None:
+        response = self._make_response(content="Hello world")
+        mock_client.chat.completions.create = AsyncMock(return_value=response)
+
+        result = await protocol.invoke_llm(
+            model_id="gpt-4", messages=[_msg("user", "hi")]
+        )
+
+        assert isinstance(result, AssistantMessage)
+        assert result.content == "Hello world"
+        assert result.role == "assistant"
+
+    async def test_invoke_llm_extracts_reasoning_content(
+        self, protocol, mock_client
+    ) -> None:
+        response = self._make_response(
+            content="answer", reasoning_content="thinking..."
+        )
+        mock_client.chat.completions.create = AsyncMock(return_value=response)
+
+        result = await protocol.invoke_llm(
+            model_id="gpt-4", messages=[_msg("user", "hi")]
+        )
+
+        assert result.content == "answer"
+        assert result.reasoning_content == "thinking..."
+
+    async def test_invoke_llm_falls_back_to_reasoning_attr(
+        self, protocol, mock_client
+    ) -> None:
+        message = SimpleNamespace(content="answer", reasoning="thinking...")
+        choice = SimpleNamespace(message=message)
+        response = SimpleNamespace(choices=[choice])
+        mock_client.chat.completions.create = AsyncMock(return_value=response)
+
+        result = await protocol.invoke_llm(
+            model_id="gpt-4", messages=[_msg("user", "hi")]
+        )
+
+        assert result.content == "answer"
+        assert result.reasoning_content == "thinking..."
+
+    async def test_invoke_llm_passes_params(
+        self, protocol, mock_client
+    ) -> None:
+        response = self._make_response(content="ok")
+        mock_create = AsyncMock(return_value=response)
+        mock_client.chat.completions.create = mock_create
+        params = InferenceParams(temperature=0.7, max_tokens=100, top_p=0.9)
+
+        await protocol.invoke_llm(
+            model_id="gpt-4",
+            messages=[_msg("user", "hi")],
+            params=params,
+        )
+
+        mock_create.assert_awaited_once_with(
+            model="gpt-4",
+            messages=[{"role": "user", "content": "hi"}],
+            temperature=0.7,
+            max_tokens=100,
+            top_p=0.9,
+            stream=False,
+            timeout=120,
+        )
+
+    async def test_invoke_llm_uses_default_params(
+        self, protocol, mock_client
+    ) -> None:
+        response = self._make_response(content="ok")
+        mock_create = AsyncMock(return_value=response)
+        mock_client.chat.completions.create = mock_create
+
+        await protocol.invoke_llm(
+            model_id="gpt-4",
+            messages=[_msg("user", "hi")],
+        )
+
+        mock_create.assert_awaited_once_with(
+            model="gpt-4",
+            messages=[{"role": "user", "content": "hi"}],
+            temperature=None,
+            max_tokens=None,
+            top_p=None,
+            stream=False,
+            timeout=120,
+        )
+
+    async def test_invoke_llm_uses_blank_content_when_none(
+        self, protocol, mock_client
+    ) -> None:
+        response = self._make_response(content=None)
+        mock_client.chat.completions.create = AsyncMock(return_value=response)
+
+        result = await protocol.invoke_llm(
+            model_id="gpt-4", messages=[_msg("user", "hi")]
+        )
+
+        assert result.content == ""
 
 
 def _msg(role, content):

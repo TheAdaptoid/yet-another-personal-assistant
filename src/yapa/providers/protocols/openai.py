@@ -10,9 +10,18 @@ from openai.types.chat import (
     ChatCompletionUserMessageParam,
 )
 
-from yapa.models import InferenceParams, Message, ModelData, ModelType, StreamDelta
+from yapa.models import (
+    AssistantMessage,
+    InferenceParams,
+    Message,
+    ModelData,
+    ModelType,
+    StreamDelta,
+)
 
 from ..base import InferenceProtocol, ModelFetchProtocol
+
+BLANK_CONTENT = ""
 
 
 class OpenAIModelFetchProtocol(ModelFetchProtocol):
@@ -117,7 +126,7 @@ class OpenAIInferenceProtocol(InferenceProtocol):
         else:
             raise ValueError(f"Unsupported message role: {message.role}")
 
-    async def invoke_llm(
+    async def invoke_llm_stream(
         self,
         model_id: str,
         messages: list[Message],
@@ -158,3 +167,44 @@ class OpenAIInferenceProtocol(InferenceProtocol):
                 content=content, reasoning_content=reasoning_content, done=False
             )
             yield delta
+
+    async def invoke_llm(
+        self,
+        model_id: str,
+        messages: list[Message],
+        params: InferenceParams | None = None,
+    ) -> AssistantMessage:
+        """
+        Invoke a language model and return the complete response.
+
+        Args:
+            model_id (str): The unique identifier of the model to invoke.
+            messages (list[Message]): The conversation history to provide as input.
+            params (InferenceParams | None): Parameters for model inference.
+
+        Returns:
+            AssistantMessage: The complete response from the model.
+        """
+        params = params or InferenceParams()
+        formatted_messages = [self._format_message(m) for m in messages]
+
+        response = await self.client.chat.completions.create(
+            model=model_id,
+            messages=formatted_messages,
+            temperature=params.temperature,
+            max_tokens=params.max_tokens,
+            top_p=params.top_p,
+            stream=False,
+            timeout=120,  # seconds
+        )
+
+        content = response.choices[0].message.content or BLANK_CONTENT
+        reasoning_content = getattr(
+            response.choices[0].message,
+            "reasoning",
+            getattr(response.choices[0].message, "reasoning_content", None),
+        )
+
+        return AssistantMessage(
+            role="assistant", content=content, reasoning_content=reasoning_content
+        )

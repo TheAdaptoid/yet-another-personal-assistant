@@ -2,6 +2,7 @@
 
 import io
 from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import UUID
 
 import pytest
 from rich.console import Console
@@ -12,23 +13,20 @@ from yapa.models import (
     AssistantMessage,
     ModelData,
     ModelType,
-    SessionSummary,
+    Session,
     StreamDelta,
     UserMessage,
 )
 from yapa.services import ConversationService
+from yapa.storage import GenericStore
 
 
-def _make_summary(**overrides: str | int) -> SessionSummary:
-    from datetime import datetime, timezone
-
-    return SessionSummary(
-        id=overrides.get("id", "test-id-1234"),
-        title=overrides.get("title", "Test Session"),  # type: ignore[arg-type]
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
-        message_count=overrides.get("message_count", 0),  # type: ignore[arg-type]
-    )
+def _make_session(**overrides):
+    s = MagicMock()
+    s.id = overrides.get("id", "test-id-1234")
+    s.title = overrides.get("title", "Test Session")
+    s.messages = overrides.get("messages", [])
+    return s
 
 
 class TestRunConversation:
@@ -37,8 +35,14 @@ class TestRunConversation:
     @pytest.fixture
     def mock_service(self):
         svc = MagicMock()
-        svc.start = AsyncMock(return_value=_make_summary())
-        svc.switch_session.return_value = _make_summary(message_count=3)
+        svc.start = AsyncMock(return_value=_make_session())
+        svc.switch_session.return_value = _make_session(messages=[
+            UserMessage(content="What is the capital of France?"),
+            AssistantMessage(
+                content="The capital of France is Paris.",
+                model="test-model",
+            ),
+        ])
         svc.model = ModelData(
             id="test-model", provider_id="test", type=ModelType.LLM
         )
@@ -84,7 +88,7 @@ class TestRunConversation:
         """Providing a session_id resumes the session and shows last 2 messages."""
         mock_console.input.return_value = "/exit"
         await run_conversation(
-            session_id=seeded_session.id,
+            session_id=str(seeded_session.id),
             service=mock_service,
             console=mock_console,
         )
@@ -94,7 +98,7 @@ class TestRunConversation:
         assert "What is the capital of France?" in output
         assert "The capital of France is Paris." in output
 
-    async def test_default_model_from_config(self, mock_console):
+    async def test_default_model_from_config(self, mock_console, tmp_path):
         """When model_id is None, falls back to config.default_model."""
         mock_console.input.return_value = "/exit"
         mock_provider = MagicMock()
@@ -102,7 +106,7 @@ class TestRunConversation:
         async def _invoke(model, messages, params=None):
             yield StreamDelta(content=None, reasoning_content=None, done=True)
 
-        mock_provider.invoke_llm = _invoke
+        mock_provider.invoke_llm_stream = _invoke
 
         ps = MagicMock()
         ps.get_model = AsyncMock(
@@ -112,8 +116,15 @@ class TestRunConversation:
         )
         ps.get_provider_by_model.return_value = mock_provider
 
-        cfg = Config(default_model="openrouter:openrouter/free")
-        svc = ConversationService(provider_service=ps, config=cfg)
+        cfg = Config(
+            default_model="openrouter:openrouter/free",
+            storage_dir=tmp_path,
+        )
+        store = GenericStore[Session](
+            storage_dir=tmp_path / "sessions",
+            entity_type=Session,
+        )
+        svc = ConversationService(provider_service=ps, config=cfg, store=store)
 
         await run_conversation(
             model_id=None,
@@ -204,8 +215,14 @@ class TestSlashCommands:
     @pytest.fixture
     def mock_service(self):
         svc = MagicMock()
-        svc.start = AsyncMock(return_value=_make_summary())
-        svc.switch_session.return_value = _make_summary(message_count=5)
+        svc.start = AsyncMock(return_value=_make_session())
+        svc.switch_session.return_value = _make_session(messages=[
+            UserMessage(content="What is the capital of France?"),
+            AssistantMessage(
+                content="The capital of France is Paris.",
+                model="test-model",
+            ),
+        ])
         svc.model = ModelData(
             id="test-model", provider_id="test", type=ModelType.LLM
         )
@@ -276,13 +293,14 @@ class TestSlashCommands:
 
     async def test_slash_session(self, mock_service, mock_console):
         """'/session <id>' calls switch_session."""
-        mock_console.input.side_effect = ["/session other-session-id", "/exit"]
+        sid = "12345678-1234-5678-1234-567812345678"
+        mock_console.input.side_effect = [f"/session {sid}", "/exit"]
         await run_conversation(
             model_id="test-model",
             service=mock_service,
             console=mock_console,
         )
-        mock_service.switch_session.assert_called_once_with("other-session-id")
+        mock_service.switch_session.assert_called_once_with(UUID(sid))
 
     async def test_slash_session_missing_arg(self, mock_service, mock_console):
         """'/session' with no arg shows usage."""
@@ -332,7 +350,7 @@ class TestSlashSessions:
     @pytest.fixture
     def mock_service(self):
         svc = MagicMock()
-        svc.start = AsyncMock(return_value=_make_summary())
+        svc.start = AsyncMock(return_value=_make_session())
         svc.model = ModelData(
             id="test-model", provider_id="test", type=ModelType.LLM
         )

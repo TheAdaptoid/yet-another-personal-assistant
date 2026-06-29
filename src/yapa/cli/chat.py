@@ -1,5 +1,7 @@
 """Interactive conversation handler — slash-command-aware chat loop."""
 
+from uuid import UUID
+
 from rich.console import Console, Group
 from rich.live import Live
 from rich.markdown import Markdown
@@ -7,7 +9,7 @@ from rich.rule import Rule
 from rich.text import Text
 
 from yapa.config import Config, get_config, save_config
-from yapa.models import AssistantMessage, SessionSummary
+from yapa.models import AssistantMessage, Session
 from yapa.services import ConversationError, ConversationService
 
 _HELP_TEXT = """\
@@ -26,8 +28,9 @@ async def _handle_slash_command(
     svc: ConversationService,
     cfg: Config,
     con: Console,
-) -> SessionSummary | None:
-    """Handle a parsed slash command. Returns new SessionSummary if /session."""
+) -> Session | None:
+    """Handle a parsed slash command. Returns new Session if /session."""
+
     if cmd == "help":
         con.print(_HELP_TEXT)
     elif cmd == "sessions":
@@ -52,10 +55,10 @@ async def _handle_slash_command(
             con.print("[red]Usage: /session <session-id>[/red]")
             return None
         try:
-            info = svc.switch_session(arg)
+            info = svc.switch_session(UUID(arg))
             con.print(
-                f"[dim]Switched to session '{info.id}'"
-                f" ({info.message_count} messages)"
+                f"[dim]Switched to session '{str(info.id)}'"
+                f" ({len(info.messages)} messages)"
                 "[/dim]"
             )
             return info
@@ -138,7 +141,7 @@ async def _stream_response(
 
 def _start_session(
     svc: ConversationService,
-    info: SessionSummary,
+    info: Session,
     session_id: str | None,
     con: Console,
 ) -> None:
@@ -146,13 +149,13 @@ def _start_session(
     if session_id:
         con.print(
             Rule(
-                f"resumed session: {info.id} ({info.message_count} messages)",
+                f"resumed session: {str(info.id)} ({len(info.messages)} messages)",
                 style="dim",
                 align="left",
             )
         )
     else:
-        con.print(Rule(f"new session: {info.id}", style="dim", align="left"))
+        con.print(Rule(f"new session: {str(info.id)}", style="dim", align="left"))
 
     con.print(
         Rule(
@@ -215,8 +218,8 @@ async def run_conversation(
     if model is not None:
         svc.model = model
 
-    info = await svc.start(session_id=session_id)
-    is_new = info.message_count == 0
+    info = await svc.start(session_id=UUID(session_id) if session_id else None)
+    is_new = len(info.messages) == 0
     _start_session(svc, info, session_id, con)
 
     try:
@@ -233,7 +236,7 @@ async def run_conversation(
             if prompt == "/exit":
                 con.print(
                     Rule(
-                        f"session saved ({info.id})",
+                        f"session saved ({str(info.id)})",
                         style="red",
                         align="left",
                     )

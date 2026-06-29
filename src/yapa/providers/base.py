@@ -3,7 +3,14 @@
 from typing import AsyncGenerator, Protocol
 
 from yapa.logging import get_logger
-from yapa.models import InferenceParams, Message, ModelData, ModelType, StreamDelta
+from yapa.models import (
+    AssistantMessage,
+    InferenceParams,
+    Message,
+    ModelData,
+    ModelType,
+    StreamDelta,
+)
 
 from .exceptions import ModelInvocationError, ModelsFetchError
 
@@ -40,7 +47,7 @@ class ModelFetchProtocol(Protocol):
 class InferenceProtocol(Protocol):
     """Defines the protocol for invoking a model."""
 
-    def invoke_llm(
+    def invoke_llm_stream(
         self,
         model_id: str,
         messages: list[Message],
@@ -48,6 +55,9 @@ class InferenceProtocol(Protocol):
     ) -> AsyncGenerator[StreamDelta, None]:
         """
         Invoke the model with the given list of messages.
+
+        This method returns an asynchronous generator that yields `StreamDelta` objects,
+        which represent incremental updates to the model's response.
 
         Args:
             model_id (str): The unique identifier of the model to invoke.
@@ -57,6 +67,27 @@ class InferenceProtocol(Protocol):
         Returns:
             AsyncGenerator[StreamDelta, None]: An asynchronous generator yielding the
                 model's responses.
+        """
+        ...
+
+    async def invoke_llm(
+        self,
+        model_id: str,
+        messages: list[Message],
+        params: InferenceParams | None = None,
+    ) -> AssistantMessage:
+        """
+        Invoke the model with the given list of messages.
+
+        This method is asynchronous and returns the complete response from the model.
+
+        Args:
+            model_id (str): The unique identifier of the model to invoke.
+            messages (list[Message]): The list of messages to send to the model.
+            params (InferenceParams | None): Optional inference parameters.
+
+        Returns:
+            AssistantMessage: The model's response.
         """
         ...
 
@@ -141,7 +172,21 @@ class InferenceProvider:
                 f"Failed to fetch model '{model_id}' from provider '{self.id}': {e}"
             ) from e
 
-    async def invoke_llm(
+    def _pre_invoke(self, model: ModelData) -> None:
+        """
+        Perform any necessary pre-invocation checks or setup.
+
+        Args:
+            model (ModelData): The model to be invoked.
+
+        Raises:
+            ModelInvocationError: If the model is not suitable for invocation.
+        """
+        if model.type != ModelType.LLM:
+            raise ModelInvocationError(f"Model '{model.id}' is not an LLM.")
+        self._logger.info(f"Invoking model '{model.id}'.")
+
+    async def invoke_llm_stream(
         self,
         model: ModelData,
         messages: list[Message],
@@ -161,12 +206,9 @@ class InferenceProvider:
         Raises:
             ModelInvocationError: If model invocation fails.
         """
-        if model.type != ModelType.LLM:
-            raise ModelInvocationError(f"Model '{model.id}' is not an LLM.")
-
-        self._logger.info(f"Invoking model '{model.id}'.")
+        self._pre_invoke(model)
         try:
-            async for delta in self._model_invoker.invoke_llm(
+            async for delta in self._model_invoker.invoke_llm_stream(
                 model_id=model.id,
                 messages=messages,
                 params=params,
@@ -182,3 +224,38 @@ class InferenceProvider:
             ) from e
         else:
             yield StreamDelta(content=None, reasoning_content=None, done=True)
+
+    async def invoke_llm(
+        self,
+        model: ModelData,
+        messages: list[Message],
+        params: InferenceParams | None = None,
+    ) -> AssistantMessage:
+        """
+        Invoke the specified model with the given messages and return the response.
+
+        Args:
+            model (ModelData): The model to invoke.
+            messages (list[Message]): A list of messages to send to the model.
+            params (InferenceParams | None): Optional inference parameters.
+
+        Returns:
+            AssistantMessage: The complete response from the model.
+
+        Raises:
+            ModelInvocationError: If model invocation fails.
+        """
+        self._pre_invoke(model)
+        try:
+            response = await self._model_invoker.invoke_llm(
+                model_id=model.id,
+                messages=messages,
+                params=params,
+            )
+            return response
+        except Exception as e:
+            self._logger.error(f"Model invocation failed for '{model.id}': {e}")
+            raise ModelInvocationError(
+                f"Model invocation from provider '{self.id}' "
+                f"failed for '{model.id}': {e}"
+            ) from e

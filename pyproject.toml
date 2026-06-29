@@ -1,6 +1,6 @@
 [project]
 name = "yapa"
-version = "0.1.6"
+version = "0.1.7"
 description = "A terminal-based personal assistant"
 readme = "README.md"
 requires-python = ">=3.13"
@@ -10,7 +10,6 @@ dependencies = [
     "pydantic>=2.13.4",
     "python-dotenv>=1.2.2",
     "rich>=15.0.0",
-    "sqlmodel>=0.0.38",
     "typer>=0.26.7",
 ]
 

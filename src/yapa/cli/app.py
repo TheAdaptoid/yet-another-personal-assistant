@@ -8,10 +8,8 @@ from typer import Argument, Exit, Option, Typer
 from .chat import run_conversation
 from .models import list_models, set_default_model
 from .sessions import (
-    _auto_rename_session,
     delete_session,
     list_sessions,
-    purge_sessions,
     rename_session,
 )
 
@@ -53,9 +51,9 @@ def chat(
         if continue_last:
             from yapa.services import SessionService
 
-            sessions = SessionService().list_all()
+            sessions = SessionService().list_sessions()
             if sessions:
-                session_id = sessions[0].id
+                session_id = str(sessions[0].id)
         asyncio.run(run_conversation(model_id=model, session_id=session_id))
     except KeyboardInterrupt:
         pass
@@ -71,25 +69,9 @@ def sessions_list() -> None:
 def sessions_rename(
     session_id: str = Argument(..., help="Session ID to rename"),
     title: str | None = Argument(None, help="New title for the session"),
-    auto: bool = Option(
-        False,
-        "--auto",
-        "-a",
-        help="Auto-generate title from conversation",
-    ),
 ) -> None:
     """Rename a conversation session."""
-    if auto:
-        t = asyncio.run(_auto_rename_session(session_id))
-        if t:
-            Console().print(
-                f"[dim]Renamed [blue]{session_id}[/blue] to '{t}'[/dim]"
-            )
-        else:
-            Console().print(
-                "[dim]\u2717 [yellow]Could not auto-generate title[/yellow][/dim]"
-            )
-    elif title:
+    if title:
         rename_session(session_id, title)
     else:
         Console().print("[red]Error:[/red] Provide a title or use --auto")
@@ -98,19 +80,7 @@ def sessions_rename(
 
 @sessions_app.command(name="delete")
 def sessions_delete(
-    session_id: str | None = Argument(None, help="Session ID to delete"),
-    purge: bool = Option(
-        False,
-        "--purge",
-        "-p",
-        help="Delete all sessions with fewer than 2 messages",
-    ),
+    session_id: str = Argument(..., help="Session ID to delete"),
 ) -> None:
-    """Delete a conversation session and its messages, or purge empty sessions."""
-    if purge:
-        purge_sessions()
-    elif session_id:
-        delete_session(session_id)
-    else:
-        console = Console()
-        console.print("[red]Error:[/red] Specify a session ID or use --purge")
+    """Delete a conversation session and its messages."""
+    delete_session(session_id)

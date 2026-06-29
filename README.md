@@ -157,10 +157,10 @@ uv run ruff check src/ tests/ && uv run ty check src/ && uv run pytest tests/ -v
 ```text
 src/yapa/
   cli/         # Typer commands (app, chat, models, sessions)
-  database/    # SQLite models, engine, repositories (sqlmodel)
   models/      # Message, inference, and session data models
   providers/   # Provider abstraction + implementations (OpenRouter, LM Studio)
   services/    # UI-agnostic business logic (conversation, session, provider services)
+  storage/     # JSON-based object persistence
   config.py    # Config loading and persistence
   logging.py   # File and console logging helpers
 ```

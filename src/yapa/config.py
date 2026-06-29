@@ -13,6 +13,7 @@ load_dotenv()
 DEFAULT_DATA_DIR = Path.home() / ".yapa"
 DEFAULT_CONFIG_PATH = DEFAULT_DATA_DIR / "config.json"
 DEFAULT_DATABASE_PATH = DEFAULT_DATA_DIR / "yapa.db"
+DEFAULT_STORAGE_DIR = DEFAULT_DATA_DIR / "storage"
 DEFAULT_MODEL = "openrouter:openrouter/free"
 DEFAULT_LOG_LEVEL = "INFO"
 
@@ -40,6 +41,7 @@ class Config(BaseModel):
         default_model (str): Full model identifier (provider_id:model_id)
             to use by default.
 
+        storage_dir (Path): Directory for YAPA storage (sessions, tasks, logs).
         data_dir (Path): Directory for YAPA data storage (sessions, tasks, logs).
         log_level (str): Logging level (DEBUG, INFO, WARNING, ERROR).
     """
@@ -52,6 +54,7 @@ class Config(BaseModel):
     ollama_base_url: str = DEFAULT_OLLAMA_BASE_URL
     default_model: str = DEFAULT_MODEL
     data_dir: Path = Field(default_factory=lambda: DEFAULT_DATA_DIR)
+    storage_dir: Path = Field(default_factory=lambda: DEFAULT_STORAGE_DIR)
     database_path: Path = Field(default_factory=lambda: DEFAULT_DATABASE_PATH)
     log_level: str = Field(
         default=DEFAULT_LOG_LEVEL, pattern="^(DEBUG|INFO|WARNING|ERROR)$"
@@ -63,7 +66,7 @@ def load_config(path: Path | None = None) -> Config:
     Load configuration from file with environment variable overrides.
 
     Reads ~/.yapa/config.json if it exists, then applies environment variable
-    overrides. Creates the data directory if it doesn't exist.
+    overrides. Creates the data and storage directories if they don't exist.
 
     Args:
         path (Path | None): Optional custom config file path. Defaults to
@@ -105,6 +108,8 @@ def load_config(path: Path | None = None) -> Config:
 
     config.data_dir = config.data_dir.expanduser().resolve()
     config.data_dir.mkdir(parents=True, exist_ok=True)
+    config.storage_dir = config.storage_dir.expanduser().resolve()
+    config.storage_dir.mkdir(parents=True, exist_ok=True)
     config.database_path = config.database_path.expanduser().resolve()
     config.database_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -145,6 +150,8 @@ def save_config(config: Config, path: Path | None = None) -> None:
 
     if config_dict.get("data_dir"):
         config_dict["data_dir"] = str(config_dict["data_dir"])
+    if config_dict.get("storage_dir"):
+        config_dict["storage_dir"] = str(config_dict["storage_dir"])
     if config_dict.get("database_path"):
         config_dict["database_path"] = str(config_dict["database_path"])
 
