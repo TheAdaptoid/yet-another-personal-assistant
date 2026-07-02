@@ -5,7 +5,7 @@ from openai import AsyncOpenAI
 from yapa.config import Config, get_config
 
 from ..base import InferenceProvider
-from ..protocols import OpenAIInferenceProtocol, OpenAIModelFetchProtocol
+from ..openai.protocols import OpenAILLMInferenceProtocol, OpenAIModelFetchProtocol
 
 
 class OllamaIP(InferenceProvider):
@@ -19,17 +19,10 @@ class OllamaIP(InferenceProvider):
             config: Optional config override. Falls back to get_config().
         """
         cfg = config or get_config()
-
-        openai_client = AsyncOpenAI(
-            api_key=cfg.ollama_api_key, base_url=cfg.ollama_base_url
-        )
-        model_fetcher = OpenAIModelFetchProtocol(
-            client=openai_client, provider_id="ollama"
-        )
-        model_invoker = OpenAIInferenceProtocol(client=openai_client)
+        client = AsyncOpenAI(api_key=cfg.ollama_api_key, base_url=cfg.ollama_base_url)
         super().__init__(
             identifier="ollama",
             name="Ollama",
-            model_fetcher=model_fetcher,
-            model_invoker=model_invoker,
+            model_fetcher=OpenAIModelFetchProtocol(client=client, provider_id="ollama"),
+            llm_invoker=OpenAILLMInferenceProtocol(client=client),
         )

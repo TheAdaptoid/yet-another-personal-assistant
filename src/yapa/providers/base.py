@@ -1,6 +1,6 @@
 """Inference provider base class and utilities."""
 
-from typing import AsyncGenerator, Protocol
+from typing import AsyncGenerator
 
 from yapa.logging import get_logger
 from yapa.models import (
@@ -11,85 +11,13 @@ from yapa.models import (
     ModelType,
     StreamDelta,
 )
+from yapa.tools import Tool
 
 from .exceptions import ModelInvocationError, ModelsFetchError
-
-
-class ModelFetchProtocol(Protocol):
-    """Defines the protocol for fetching models from a provider."""
-
-    async def list_models(self, model_type: ModelType | None = None) -> list[ModelData]:
-        """
-        Retrieve a list of available models for this provider.
-
-        Args:
-            model_type (ModelType | None): Optional filter for the type of models
-                to list.
-
-        Returns:
-            list[ModelData]: A list of available models.
-        """
-        ...
-
-    async def get_model(self, model_id: str) -> ModelData:
-        """
-        Retrieve detailed information about a specific model.
-
-        Args:
-            model_id (str): The unique identifier of the model to retrieve.
-
-        Returns:
-            ModelData: Detailed information about the specified model.
-        """
-        ...
-
-
-class InferenceProtocol(Protocol):
-    """Defines the protocol for invoking a model."""
-
-    def invoke_llm_stream(
-        self,
-        model_id: str,
-        messages: list[Message],
-        params: InferenceParams | None = None,
-    ) -> AsyncGenerator[StreamDelta, None]:
-        """
-        Invoke the model with the given list of messages.
-
-        This method returns an asynchronous generator that yields `StreamDelta` objects,
-        which represent incremental updates to the model's response.
-
-        Args:
-            model_id (str): The unique identifier of the model to invoke.
-            messages (list[Message]): The list of messages to send to the model.
-            params (InferenceParams | None): Optional inference parameters.
-
-        Returns:
-            AsyncGenerator[StreamDelta, None]: An asynchronous generator yielding the
-                model's responses.
-        """
-        ...
-
-    async def invoke_llm(
-        self,
-        model_id: str,
-        messages: list[Message],
-        params: InferenceParams | None = None,
-    ) -> AssistantMessage:
-        """
-        Invoke the model with the given list of messages.
-
-        This method is asynchronous and returns the complete response from the model.
-
-        Args:
-            model_id (str): The unique identifier of the model to invoke.
-            messages (list[Message]): The list of messages to send to the model.
-            params (InferenceParams | None): Optional inference parameters.
-
-        Returns:
-            AssistantMessage: The model's response.
-        """
-        ...
+from .protocols import (
+    LLMInferenceProtocol,
+    ModelFetchProtocol,
+)
 
 
 class InferenceProvider:
@@ -100,7 +28,7 @@ class InferenceProvider:
         identifier: str,
         name: str,
         model_fetcher: ModelFetchProtocol,
-        model_invoker: InferenceProtocol,
+        llm_invoker: LLMInferenceProtocol,
     ) -> None:
         """
         Initialize a new inference provider.
@@ -109,12 +37,12 @@ class InferenceProvider:
             identifier (str): The unique identifier for this provider.
             name (str): The human-readable name of this provider.
             model_fetcher (ModelFetchProtocol): The protocol for fetching models.
-            model_invoker (InferenceProtocol): The protocol for invoking models.
+            llm_invoker (LLMInferenceProtocol): The protocol for invoking models.
         """
         self._identifier = identifier
         self._name = name
         self._model_fetcher: ModelFetchProtocol = model_fetcher
-        self._model_invoker: InferenceProtocol = model_invoker
+        self._llm_invoker: LLMInferenceProtocol = llm_invoker
         self._logger = get_logger(f"inference_provider.{self._identifier}")
 
     @property
@@ -190,6 +118,7 @@ class InferenceProvider:
         self,
         model: ModelData,
         messages: list[Message],
+        tools: list[Tool] | None = None,
         params: InferenceParams | None = None,
     ) -> AsyncGenerator[StreamDelta, None]:
         """
@@ -198,6 +127,7 @@ class InferenceProvider:
         Args:
             model (ModelData): The model to invoke.
             messages (list[Message]): A list of messages to send to the model.
+            tools (list[Tool] | None): Optional list of tools to use.
             params (InferenceParams | None): Optional inference parameters.
 
         Yields:
@@ -208,9 +138,10 @@ class InferenceProvider:
         """
         self._pre_invoke(model)
         try:
-            async for delta in self._model_invoker.invoke_llm_stream(
+            async for delta in self._llm_invoker.stream_invoke(
                 model_id=model.id,
                 messages=messages,
+                tools=tools,
                 params=params,
             ):
                 yield delta
@@ -225,10 +156,11 @@ class InferenceProvider:
         else:
             yield StreamDelta(content=None, reasoning_content=None, done=True)
 
-    async def invoke_llm(
+    async def invoke_llm_static(
         self,
         model: ModelData,
         messages: list[Message],
+        tools: list[Tool] | None = None,
         params: InferenceParams | None = None,
     ) -> AssistantMessage:
         """
@@ -237,6 +169,7 @@ class InferenceProvider:
         Args:
             model (ModelData): The model to invoke.
             messages (list[Message]): A list of messages to send to the model.
+            tools (list[Tool] | None): Optional list of tools to use.
             params (InferenceParams | None): Optional inference parameters.
 
         Returns:
@@ -247,9 +180,10 @@ class InferenceProvider:
         """
         self._pre_invoke(model)
         try:
-            response = await self._model_invoker.invoke_llm(
+            response = await self._llm_invoker.static_invoke(
                 model_id=model.id,
                 messages=messages,
+                tools=tools,
                 params=params,
             )
             return response

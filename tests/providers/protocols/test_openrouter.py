@@ -19,7 +19,7 @@ class TestOpenRouterFetchProtocol:
 
     @pytest.fixture
     def protocol(self, config):
-        from yapa.providers.protocols.openrouter import OpenRouterFetchProtocol
+        from yapa.providers.openrouter.protocols import OpenRouterFetchProtocol
 
         return OpenRouterFetchProtocol(config=config, provider_id="openrouter")
 
@@ -40,7 +40,7 @@ class TestOpenRouterFetchProtocol:
         mock_client.models.list.return_value = response
 
         with patch(
-            "yapa.providers.protocols.openrouter.OpenRouter",
+            "yapa.providers.openrouter.protocols.OpenRouter",
             return_value=MagicMock(__aenter__=AsyncMock(return_value=mock_client)),
         ):
             result = await protocol.list_models()
@@ -63,7 +63,7 @@ class TestOpenRouterFetchProtocol:
         mock_client.models.list.return_value = response
 
         with patch(
-            "yapa.providers.protocols.openrouter.OpenRouter",
+            "yapa.providers.openrouter.protocols.OpenRouter",
             return_value=MagicMock(__aenter__=AsyncMock(return_value=mock_client)),
         ) as mock_or:
             await protocol.list_models(model_type=ModelType.LLM)
@@ -80,7 +80,7 @@ class TestOpenRouterFetchProtocol:
         mock_client.models.list.return_value = response
 
         with patch(
-            "yapa.providers.protocols.openrouter.OpenRouter",
+            "yapa.providers.openrouter.protocols.OpenRouter",
             return_value=MagicMock(__aenter__=AsyncMock(return_value=mock_client)),
         ) as mock_or:
             await protocol.list_models()
@@ -97,7 +97,7 @@ class TestOpenRouterFetchProtocol:
         mock_client.models.list.return_value = response
 
         with patch(
-            "yapa.providers.protocols.openrouter.OpenRouter",
+            "yapa.providers.openrouter.protocols.OpenRouter",
             return_value=MagicMock(__aenter__=AsyncMock(return_value=mock_client)),
         ):
             result = await protocol.get_model(model_id="gpt-4")
@@ -114,7 +114,7 @@ class TestOpenRouterFetchProtocol:
         mock_client.models.list.return_value = response
 
         with patch(
-            "yapa.providers.protocols.openrouter.OpenRouter",
+            "yapa.providers.openrouter.protocols.OpenRouter",
             return_value=MagicMock(__aenter__=AsyncMock(return_value=mock_client)),
         ):
             with pytest.raises(ModelsFetchError, match="gpt-4"):

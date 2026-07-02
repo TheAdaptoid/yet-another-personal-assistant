@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from yapa.config import UNSET, Config
-from yapa.providers.concretes.openrouter import OpenRouterIP
+from yapa.providers.openrouter.provider import OpenRouterIP
 
 
 class TestOpenRouterIP:
@@ -22,20 +22,15 @@ class TestOpenRouterIP:
             OpenRouterIP(config=config)
 
     def test_initialization_with_valid_key(self) -> None:
-        config = Config(
-            openrouter_api_key="sk-or-v1-test",
-            openrouter_base_url="https://custom.example.com/v1",
-        )
+        config = Config(openrouter_api_key="sk-or-v1-test")
         with (
-            patch("yapa.providers.concretes.openrouter.AsyncOpenAI") as mock_openai,
-            patch("yapa.providers.concretes.openrouter.OpenRouterFetchProtocol"),
+            patch(
+                "yapa.providers.openrouter.provider.OpenRouterLLMInferenceProtocol"
+            ) as mock_proto,
+            patch("yapa.providers.openrouter.provider.OpenRouterFetchProtocol"),
         ):
-            mock_openai.return_value = MagicMock()
+            mock_proto.return_value = MagicMock()
             provider = OpenRouterIP(config=config)
 
         assert provider.id == "openrouter"
         assert provider.name == "OpenRouter"
-        mock_openai.assert_called_once_with(
-            api_key="sk-or-v1-test",
-            base_url="https://custom.example.com/v1",
-        )

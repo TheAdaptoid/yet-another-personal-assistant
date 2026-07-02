@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Generator
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator, Generator
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from yapa.models import ModelData, ModelType, StreamDelta
+from yapa.models import (
+    AssistantMessage,
+    InferenceParams,
+    ModelData,
+    ModelType,
+    StreamDelta,
+)
 from yapa.models.message import UserMessage
 from yapa.providers.base import InferenceProvider
 
@@ -30,28 +36,34 @@ def mock_model_fetcher() -> MagicMock:
 
 
 @pytest.fixture
-def mock_model_invoker() -> MagicMock:
+def mock_llm_invoker() -> MagicMock:
     invoker = MagicMock()
 
-    async def _invoke(
-        model_id: str, messages: list, params=None
+    async def _stream(
+        model_id: str,
+        messages: list[Any],
+        tools: Any = None,
+        params: InferenceParams | None = None,
     ) -> AsyncGenerator[StreamDelta, None]:
         yield StreamDelta(content="Hello", reasoning_content=None, done=False)
         yield StreamDelta(content=None, reasoning_content=None, done=True)
 
-    invoker.invoke_llm_stream = _invoke
+    invoker.stream_invoke = _stream
+    invoker.static_invoke = AsyncMock(
+        return_value=AssistantMessage(content="Hello", role="assistant")
+    )
     return invoker
 
 
 @pytest.fixture
 def provider(
-    mock_model_fetcher: MagicMock, mock_model_invoker: MagicMock
+    mock_model_fetcher: MagicMock, mock_llm_invoker: MagicMock
 ) -> InferenceProvider:
     return InferenceProvider(
         identifier="test_prov",
         name="Test Provider",
         model_fetcher=mock_model_fetcher,
-        model_invoker=mock_model_invoker,
+        llm_invoker=mock_llm_invoker,
     )
 
 
