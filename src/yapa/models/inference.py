@@ -52,6 +52,23 @@ class ModelData(BaseModel):
         return f"{self.provider_id}:{self.id}"
 
 
+class ToolCallDelta(BaseModel):
+    """
+    Represents a delta in a tool call response.
+
+    Attributes:
+        index (int): The index of the tool call in the response sequence.
+        id (str | None): The unique identifier of the tool call, if available.
+        name (str | None): The name of the tool being called, if available.
+        arguments (str | None): The arguments passed to the tool, if available.
+    """
+
+    index: int
+    id: str | None = Field(default=None)
+    name: str | None = Field(default=None)
+    arguments: str | None = Field(default=None)
+
+
 class StreamDelta(BaseModel):
     """
     Represents a delta in a streaming response.
@@ -59,6 +76,9 @@ class StreamDelta(BaseModel):
     Attributes:
         content (str | None): The content of the delta, if any.
         reasoning_content (str | None): The reasoning content of the delta, if any.
+        tool_calls (list[ToolCallDelta]): A list of tool call deltas associated with
+            this stream delta.
+        error (str | None): Error message if an error occurred during streaming.
         done (bool): Whether this delta represents the end of the stream.
     """
 
@@ -67,6 +87,13 @@ class StreamDelta(BaseModel):
     )
     reasoning_content: str | None = Field(
         default=None, description="The reasoning content of the delta, if any"
+    )
+    tool_calls: list[ToolCallDelta] = Field(
+        default_factory=list,
+        description="A list of tool call deltas associated with this stream delta",
+    )
+    error: str | None = Field(
+        default=None, description="Error message if an error occurred during streaming"
     )
     done: bool = Field(
         default=False, description="Whether this delta represents the end of the stream"

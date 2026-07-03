@@ -20,6 +20,7 @@ DEFAULT_LOG_LEVEL = "INFO"
 DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_LMSTUDIO_BASE_URL = "http://localhost:1234/v1"
 DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434/v1"
+DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
 
 UNSET = "NOT_SET"
 
@@ -52,6 +53,8 @@ class Config(BaseModel):
     lmstudio_base_url: str = DEFAULT_LMSTUDIO_BASE_URL
     ollama_api_key: str = UNSET
     ollama_base_url: str = DEFAULT_OLLAMA_BASE_URL
+    openai_api_key: str = UNSET
+    openai_base_url: str = DEFAULT_OPENAI_BASE_URL
     default_model: str = DEFAULT_MODEL
     data_dir: Path = Field(default_factory=lambda: DEFAULT_DATA_DIR)
     storage_dir: Path = Field(default_factory=lambda: DEFAULT_STORAGE_DIR)
@@ -89,6 +92,8 @@ def load_config(path: Path | None = None) -> Config:
         "lmstudio_base_url": os.environ.get("LMSTUDIO_BASE_URL"),
         "ollama_api_key": os.environ.get("OLLAMA_API_KEY"),
         "ollama_base_url": os.environ.get("OLLAMA_BASE_URL"),
+        "openai_api_key": os.environ.get("OPENAI_API_KEY"),
+        "openai_base_url": os.environ.get("OPENAI_BASE_URL"),
         "default_model": os.environ.get("YAPA_DEFAULT_MODEL"),
         "data_dir": os.environ.get("YAPA_DATA_DIR"),
         "database_path": os.environ.get("YAPA_DATABASE_PATH"),
