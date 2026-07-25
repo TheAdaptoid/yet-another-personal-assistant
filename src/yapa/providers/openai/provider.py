@@ -1,33 +1,26 @@
 """OpenAI inference provider implementation."""
 
-from openai import AsyncOpenAI
+from yapa.config import UNSET, Config
 
-from yapa.config import UNSET, Config, get_config
-
-from ..base import InferenceProvider
-from .protocols import OpenAILLMInferenceProtocol, OpenAIModelFetchProtocol
+from ..openai_compat import OpenAICompatibleProvider
 
 
-class OpenAIIP(InferenceProvider):
+class OpenAIIP(OpenAICompatibleProvider):
     """Inference provider for OpenAI."""
 
-    def __init__(self, config: Config | None = None):
+    def __init__(self, config: Config):
         """
-        Initialize a new OpenAI inference provider.
+        Initialize the OpenAI provider.
 
         Args:
-            config: Optional config override.
+            config: Application config containing the OpenAI API key and base URL.
         """
-        cfg = config or get_config()
-
-        if cfg.openai_api_key in (None, UNSET):
+        if config.openai_api_key in (None, UNSET):
             raise ValueError("OpenAI API key is not set.")
-
-        client = AsyncOpenAI(api_key=cfg.openai_api_key, base_url=cfg.openai_base_url)
-
         super().__init__(
             identifier="openai",
             name="OpenAI",
-            model_fetcher=OpenAIModelFetchProtocol(client=client, provider_id="openai"),
-            llm_invoker=OpenAILLMInferenceProtocol(client=client),
+            api_key=config.openai_api_key,
+            base_url=config.openai_base_url,
+            timeout=config.provider_timeout,
         )

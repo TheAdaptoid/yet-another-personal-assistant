@@ -1,32 +1,24 @@
 """LM Studio inference provider implementation."""
 
-from openai import AsyncOpenAI
+from yapa.config import Config
 
-from yapa.config import Config, get_config
-
-from ..base import InferenceProvider
-from ..openai.protocols import OpenAILLMInferenceProtocol, OpenAIModelFetchProtocol
+from ..openai_compat import OpenAICompatibleProvider
 
 
-class LMStudioIP(InferenceProvider):
+class LMStudioIP(OpenAICompatibleProvider):
     """Inference provider for LM Studio."""
 
-    def __init__(self, config: Config | None = None):
+    def __init__(self, config: Config):
         """
-        Initialize a new LM Studio inference provider.
+        Initialize the LM Studio provider.
 
         Args:
-            config: Optional config override.
+            config: Application config containing LM Studio credentials.
         """
-        cfg = config or get_config()
-        client = AsyncOpenAI(
-            api_key=cfg.lmstudio_api_key, base_url=cfg.lmstudio_base_url
-        )
         super().__init__(
             identifier="lmstudio",
             name="LM Studio",
-            model_fetcher=OpenAIModelFetchProtocol(
-                client=client, provider_id="lmstudio"
-            ),
-            llm_invoker=OpenAILLMInferenceProtocol(client=client),
+            api_key=config.lmstudio_api_key,
+            base_url=config.lmstudio_base_url,
+            timeout=config.provider_timeout,
         )

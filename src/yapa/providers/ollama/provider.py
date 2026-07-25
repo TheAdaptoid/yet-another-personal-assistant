@@ -1,28 +1,24 @@
 """Ollama inference provider implementation."""
 
-from openai import AsyncOpenAI
+from yapa.config import Config
 
-from yapa.config import Config, get_config
-
-from ..base import InferenceProvider
-from ..openai.protocols import OpenAILLMInferenceProtocol, OpenAIModelFetchProtocol
+from ..openai_compat import OpenAICompatibleProvider
 
 
-class OllamaIP(InferenceProvider):
+class OllamaIP(OpenAICompatibleProvider):
     """Inference provider for Ollama."""
 
-    def __init__(self, config: Config | None = None):
+    def __init__(self, config: Config):
         """
-        Initialize a new Ollama inference provider.
+        Initialize the Ollama provider.
 
         Args:
-            config: Optional config override. Falls back to get_config().
+            config: Application config containing Ollama credentials.
         """
-        cfg = config or get_config()
-        client = AsyncOpenAI(api_key=cfg.ollama_api_key, base_url=cfg.ollama_base_url)
         super().__init__(
             identifier="ollama",
             name="Ollama",
-            model_fetcher=OpenAIModelFetchProtocol(client=client, provider_id="ollama"),
-            llm_invoker=OpenAILLMInferenceProtocol(client=client),
+            api_key=config.ollama_api_key,
+            base_url=config.ollama_base_url,
+            timeout=config.provider_timeout,
         )

@@ -1,5 +1,6 @@
 """Inference provider base class and utilities."""
 
+from abc import ABC, abstractmethod
 from typing import AsyncGenerator
 
 from yapa.logging import get_logger
@@ -14,64 +15,47 @@ from yapa.models import (
 from yapa.tools import Tool
 
 from .exceptions import ModelInvocationError, ModelsFetchError
-from .protocols import (
-    LLMInferenceProtocol,
-    ModelFetchProtocol,
-)
 
 
-class InferenceProvider:
-    """Base class for inference providers."""
+class InferenceProvider(ABC):
+    """Abstract base class for inference providers."""
 
-    def __init__(
-        self,
-        identifier: str,
-        name: str,
-        model_fetcher: ModelFetchProtocol,
-        llm_invoker: LLMInferenceProtocol,
-    ) -> None:
-        """
-        Initialize a new inference provider.
-
-        Args:
-            identifier (str): The unique identifier for this provider.
-            name (str): The human-readable name of this provider.
-            model_fetcher (ModelFetchProtocol): The protocol for fetching models.
-            llm_invoker (LLMInferenceProtocol): The protocol for invoking models.
-        """
-        self._identifier = identifier
+    def __init__(self, identifier: str, name: str) -> None:
+        """Initialize the provider with an identifier and display name."""
+        self._id = identifier
         self._name = name
-        self._model_fetcher: ModelFetchProtocol = model_fetcher
-        self._llm_invoker: LLMInferenceProtocol = llm_invoker
-        self._logger = get_logger(f"inference_provider.{self._identifier}")
+        self._logger = get_logger(f"inference_provider.{identifier}")
 
     @property
     def id(self) -> str:
-        """Returns the unique identifier for this provider."""
-        return self._identifier
+        """Return the unique identifier for this provider."""
+        return self._id
 
     @property
     def name(self) -> str:
-        """Returns the human-readable name of this provider."""
+        """Return the human-readable name of this provider."""
         return self._name
+
+    # ── Public methods (logging + error wrapping) ──
 
     async def list_models(self, model_type: ModelType | None = None) -> list[ModelData]:
         """
-        Retrieve a list of available models for this provider.
+        Retrieve available models, optionally filtered by type.
 
         Args:
-            model_type (ModelType | None): Optional filter for the type of models
-                to list.
+            model_type: Optional filter to only include models of a specific type.
 
         Returns:
-            list[ModelData]: A list of available models.
+            A list of available models.
 
         Raises:
             ModelsFetchError: If fetching models from the provider fails.
         """
         self._logger.info("Fetching models...")
         try:
-            return await self._model_fetcher.list_models(model_type=model_type)
+            return await self._list_models_impl(model_type)
+        except ModelsFetchError:
+            raise
         except Exception as e:
             self._logger.error(f"Failed to fetch models: {e}")
             raise ModelsFetchError(
@@ -83,38 +67,26 @@ class InferenceProvider:
         Retrieve detailed information about a specific model.
 
         Args:
-            model_id (str): The unique identifier of the model to retrieve.
+            model_id: The unique identifier of the model to retrieve.
 
         Returns:
-            ModelData: Detailed information about the specified model.
+            Detailed information about the specified model.
 
         Raises:
             ModelsFetchError: If fetching the model from the provider fails.
         """
         self._logger.info(f"Fetching model '{model_id}'...")
         try:
-            return await self._model_fetcher.get_model(model_id=model_id)
+            return await self._get_model_impl(model_id)
+        except ModelsFetchError:
+            raise
         except Exception as e:
             self._logger.error(f"Failed to fetch model '{model_id}': {e}")
             raise ModelsFetchError(
                 f"Failed to fetch model '{model_id}' from provider '{self.id}': {e}"
             ) from e
 
-    def _pre_invoke(self, model: ModelData) -> None:
-        """
-        Perform any necessary pre-invocation checks or setup.
-
-        Args:
-            model (ModelData): The model to be invoked.
-
-        Raises:
-            ModelInvocationError: If the model is not suitable for invocation.
-        """
-        if model.type != ModelType.LLM:
-            raise ModelInvocationError(f"Model '{model.id}' is not an LLM.")
-        self._logger.info(f"Invoking model '{model.id}'.")
-
-    async def invoke_llm_stream(
+    async def stream_chat(
         self,
         model: ModelData,
         messages: list[Message],
@@ -122,29 +94,31 @@ class InferenceProvider:
         params: InferenceParams | None = None,
     ) -> AsyncGenerator[StreamDelta, None]:
         """
-        Invoke the specified model with the given messages and stream the response.
+        Invoke the model and stream the response.
 
         Args:
-            model (ModelData): The model to invoke.
-            messages (list[Message]): A list of messages to send to the model.
-            tools (list[Tool] | None): Optional list of tools to use.
-            params (InferenceParams | None): Optional inference parameters.
+            model: The model to invoke.
+            messages: The conversation history.
+            tools: Optional tools the model may use.
+            params: Optional inference parameters.
 
         Yields:
-            StreamDelta: The next chunk of the response from the model.
+            StreamDelta chunks from the model response.
 
         Raises:
             ModelInvocationError: If model invocation fails.
         """
-        self._pre_invoke(model)
+        self._pre_invoke_check(model)
         try:
-            async for delta in self._llm_invoker.stream_invoke(
+            async for delta in self._stream_chat_impl(
                 model_id=model.id,
                 messages=messages,
                 tools=tools,
                 params=params,
             ):
                 yield delta
+        except ModelInvocationError:
+            raise
         except Exception as e:
             self._logger.error(
                 f"Streaming model invocation failed for '{model.id}': {e}"
@@ -153,10 +127,8 @@ class InferenceProvider:
                 f"Streaming model invocation from provider '{self.id}' "
                 f"failed for '{model.id}': {e}"
             ) from e
-        else:
-            yield StreamDelta(content=None, reasoning_content=None, done=True)
 
-    async def invoke_llm_static(
+    async def static_chat(
         self,
         model: ModelData,
         messages: list[Message],
@@ -164,32 +136,65 @@ class InferenceProvider:
         params: InferenceParams | None = None,
     ) -> AssistantMessage:
         """
-        Invoke the specified model with the given messages and return the response.
+        Invoke the model and return the complete response.
 
         Args:
-            model (ModelData): The model to invoke.
-            messages (list[Message]): A list of messages to send to the model.
-            tools (list[Tool] | None): Optional list of tools to use.
-            params (InferenceParams | None): Optional inference parameters.
+            model: The model to invoke.
+            messages: The conversation history.
+            tools: Optional tools the model may use.
+            params: Optional inference parameters.
 
         Returns:
-            AssistantMessage: The complete response from the model.
+            The complete assistant response.
 
         Raises:
             ModelInvocationError: If model invocation fails.
         """
-        self._pre_invoke(model)
+        self._pre_invoke_check(model)
         try:
-            response = await self._llm_invoker.static_invoke(
+            return await self._static_chat_impl(
                 model_id=model.id,
                 messages=messages,
                 tools=tools,
                 params=params,
             )
-            return response
+        except ModelInvocationError:
+            raise
         except Exception as e:
             self._logger.error(f"Model invocation failed for '{model.id}': {e}")
             raise ModelInvocationError(
                 f"Model invocation from provider '{self.id}' "
                 f"failed for '{model.id}': {e}"
             ) from e
+
+    def _pre_invoke_check(self, model: ModelData) -> None:
+        if model.type != ModelType.LLM:
+            raise ModelInvocationError(f"Model '{model.id}' is not an LLM.")
+
+    # ── Private implementation methods ──
+
+    @abstractmethod
+    async def _list_models_impl(
+        self, model_type: ModelType | None = None
+    ) -> list[ModelData]: ...
+
+    @abstractmethod
+    async def _get_model_impl(self, model_id: str) -> ModelData: ...
+
+    @abstractmethod
+    def _stream_chat_impl(
+        self,
+        model_id: str,
+        messages: list[Message],
+        tools: list[Tool] | None = None,
+        params: InferenceParams | None = None,
+    ) -> AsyncGenerator[StreamDelta, None]: ...
+
+    @abstractmethod
+    async def _static_chat_impl(
+        self,
+        model_id: str,
+        messages: list[Message],
+        tools: list[Tool] | None = None,
+        params: InferenceParams | None = None,
+    ) -> AssistantMessage: ...

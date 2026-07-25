@@ -2,32 +2,29 @@
 
 from .base import InferenceProvider
 from .exceptions import InferenceProviderError, ModelInvocationError, ModelsFetchError
-from .protocols import LLMInferenceProtocol, ModelFetchProtocol
+from .lmstudio import LMStudioIP
+from .ollama import OllamaIP
+from .openai import OpenAIIP
+from .openrouter import OpenRouterProvider
+from .registry import ProviderNotAvailableError, ProviderRegistry
 
-
-def _get_default_providers() -> list[type[InferenceProvider]]:
-    """Return a list of default inference providers."""
-    from .lmstudio.provider import LMStudioIP
-    from .ollama.provider import OllamaIP
-    from .openai.provider import OpenAIIP
-    from .openrouter.provider import OpenRouterIP
-
-    return [
-        LMStudioIP,
-        OllamaIP,
-        OpenAIIP,
-        OpenRouterIP,
-    ]
-
-
-DEFAULT_PROVIDERS: list[type[InferenceProvider]] = _get_default_providers()
+DEFAULT_PROVIDER_CLASSES: list[type[InferenceProvider]] = [
+    OpenAIIP,
+    LMStudioIP,
+    OllamaIP,
+    OpenRouterProvider,
+]
 
 __all__ = [
+    "DEFAULT_PROVIDER_CLASSES",
     "InferenceProvider",
     "InferenceProviderError",
+    "LMStudioIP",
     "ModelInvocationError",
     "ModelsFetchError",
-    "LLMInferenceProtocol",
-    "ModelFetchProtocol",
-    "DEFAULT_PROVIDERS",
+    "OllamaIP",
+    "OpenAIIP",
+    "OpenRouterProvider",
+    "ProviderNotAvailableError",
+    "ProviderRegistry",
 ]
