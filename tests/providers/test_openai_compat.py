@@ -14,8 +14,10 @@ from yapa.models import (
     ToolCall,
     ToolCallDelta,
     ToolMessage,
+    TokenUsage,
     UserMessage,
 )
+from yapa.providers.openai import OpenAIIP
 from yapa.providers.openai_compat import OpenAICompatibleProvider
 
 
@@ -378,6 +380,50 @@ class TestStreamChatImpl:
         assert kwargs["max_tokens"] == 100
         assert kwargs["top_p"] == 0.9
         assert kwargs["stream"] is True
+
+
+class TestOpenAIModelMetadata:
+    """Tests for OpenAIIP._format_model() metadata lookup."""
+
+    @pytest.fixture
+    def openai_provider(self, mock_openai_client):
+        from yapa.config import Config
+
+        with patch(
+            "yapa.providers.openai_compat.AsyncOpenAI",
+            return_value=mock_openai_client,
+        ):
+            provider = OpenAIIP(config=Config(openai_api_key="sk-test"))
+        provider._client = mock_openai_client
+        return provider
+
+    def test_known_model_gets_metadata(self, openai_provider):
+        model = openai_provider._format_model("gpt-4o")
+        assert model.context_length == 128000
+        assert model.max_output == 16384
+        assert model.supports_tools is True
+        assert model.supports_vision is True
+
+    def test_unknown_model_defaults(self, openai_provider):
+        model = openai_provider._format_model("unknown-model")
+        assert model.context_length is None
+        assert model.max_output is None
+        assert model.supports_tools is False
+        assert model.supports_vision is False
+
+    def test_embed_model_gets_other_type(self, openai_provider):
+        model = openai_provider._format_model("text-embedding-3")
+        assert model.type == ModelType.OTHER
+        assert model.supports_tools is False
+        assert model.supports_vision is False
+
+    def test_all_known_models_have_metadata(self, openai_provider):
+        from yapa.providers.openai.provider import _MODEL_METADATA
+
+        for model_id in _MODEL_METADATA:
+            model = openai_provider._format_model(model_id)
+            assert model.context_length is not None
+            assert model.max_output is not None
 
 
 class TestStaticChatImpl:
