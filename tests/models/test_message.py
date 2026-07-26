@@ -2,7 +2,7 @@
 
 from pydantic import TypeAdapter
 
-from yapa.models import AssistantMessage, Message, SystemMessage, UserMessage
+from yapa.models import AssistantMessage, Message, SystemMessage, TokenUsage, UserMessage
 
 _adapter = TypeAdapter(Message)
 
@@ -31,3 +31,12 @@ class TestDiscriminator:
         restored = _adapter.validate_python(data)
         assert isinstance(restored, AssistantMessage)
         assert restored.model == "gpt-4"
+
+    def test_assistant_message_with_usage(self):
+        usage = TokenUsage(prompt_tokens=10, completion_tokens=20, total_tokens=30)
+        msg = AssistantMessage(content="hi", usage=usage)
+        data = msg.model_dump(mode="json")
+        restored = _adapter.validate_python(data)
+        assert isinstance(restored, AssistantMessage)
+        assert restored.usage is not None
+        assert restored.usage.total_tokens == 30

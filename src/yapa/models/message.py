@@ -5,6 +5,7 @@ from typing import Annotated, Literal
 from pydantic import Field
 
 from .base import TrackedEntity
+from .inference import TokenUsage
 from .tool import ToolCall
 
 
@@ -61,6 +62,9 @@ class AssistantMessage(BaseMessage):
     reasoning_content: str | None = Field(default=None)
     model: str | None = Field(default=None)
     tool_calls: list[ToolCall] = Field(default_factory=list)
+    usage: TokenUsage | None = Field(
+        default=None, description="Token usage for this response"
+    )
 
 
 class ToolMessage(BaseMessage):

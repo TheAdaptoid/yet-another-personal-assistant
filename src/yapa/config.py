@@ -64,6 +64,10 @@ class Config(BaseModel):
         default=DEFAULT_PROVIDER_TIMEOUT, ge=1,
         description="Timeout in seconds for provider API calls",
     )
+    provider_max_retries: int = Field(
+        default=2, ge=0,
+        description="Maximum number of retries for provider API calls",
+    )
     log_level: str = Field(
         default=DEFAULT_LOG_LEVEL, pattern="^(DEBUG|INFO|WARNING|ERROR)$"
     )

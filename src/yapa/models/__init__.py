@@ -18,6 +18,7 @@ from .inference import (
     ModelData,
     ModelType,
     StreamDelta,
+    TokenUsage,
     ToolCallDelta,
 )
 from .message import (
@@ -46,6 +47,7 @@ __all__ = [
     "ModelData",
     "ModelType",
     "StreamDelta",
+    "TokenUsage",
     "ToolCallDelta",
     # Session
     "Session",

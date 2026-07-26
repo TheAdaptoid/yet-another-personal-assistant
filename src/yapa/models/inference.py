@@ -12,6 +12,21 @@ class ModelType(Enum):
     OTHER = "other"
 
 
+class TokenUsage(BaseModel):
+    """
+    Token usage for a model response.
+
+    Attributes:
+        prompt_tokens: Number of tokens in the prompt.
+        completion_tokens: Number of tokens in the completion.
+        total_tokens: Total number of tokens used (prompt + completion).
+    """
+
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+
+
 class InferenceParams(BaseModel):
     """
     Parameters for model inference.
@@ -35,6 +50,11 @@ class ModelData(BaseModel):
         id (str): Unique identifier for the model.
         provider_id (str): Identifier for the provider of the model.
         type (ModelType): The type of the model.
+        context_length (int | None): Maximum context length in tokens.
+        max_output (int | None): Maximum output tokens.
+        supports_tools (bool): Whether the model supports tool/function calling.
+        supports_vision (bool): Whether the model supports image inputs.
+        pricing (dict[str, float] | None): Per-token pricing in USD per million tokens.
     """
 
     id: str = Field(..., description="Unique identifier for the model")
@@ -42,6 +62,22 @@ class ModelData(BaseModel):
         ..., description="Identifier for the provider of the model"
     )
     type: ModelType = Field(..., description="The type of the model (e.g., 'llm')")
+    context_length: int | None = Field(
+        default=None, description="Maximum context length in tokens"
+    )
+    max_output: int | None = Field(
+        default=None, description="Maximum output tokens"
+    )
+    supports_tools: bool = Field(
+        default=False, description="Whether the model supports tool/function calling"
+    )
+    supports_vision: bool = Field(
+        default=False, description="Whether the model supports image inputs"
+    )
+    pricing: dict[str, float] | None = Field(
+        default=None,
+        description="Per-token pricing in USD per million tokens, e.g. {'input': 2.50, 'output': 10.00}",
+    )
 
     # Immutable and strict model configuration
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -80,6 +116,9 @@ class StreamDelta(BaseModel):
             this stream delta.
         error (str | None): Error message if an error occurred during streaming.
         done (bool): Whether this delta represents the end of the stream.
+        finish_reason (str | None): Why the stream finished (stop, length,
+            content_filter, tool_calls).
+        usage (TokenUsage | None): Token usage for the completed stream.
     """
 
     content: str | None = Field(
@@ -97,4 +136,11 @@ class StreamDelta(BaseModel):
     )
     done: bool = Field(
         default=False, description="Whether this delta represents the end of the stream"
+    )
+    finish_reason: str | None = Field(
+        default=None,
+        description="Why the stream finished: stop, length, content_filter, tool_calls",
+    )
+    usage: TokenUsage | None = Field(
+        default=None, description="Token usage for the completed stream",
     )
