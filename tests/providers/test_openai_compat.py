@@ -14,7 +14,6 @@ from yapa.models import (
     ToolCall,
     ToolCallDelta,
     ToolMessage,
-    TokenUsage,
     UserMessage,
 )
 from yapa.providers.openai import OpenAIIP
@@ -456,9 +455,9 @@ class TestOpenAIModelMetadata:
         return provider
 
     def test_known_model_gets_metadata(self, openai_provider):
-        model = openai_provider._format_model("gpt-4o")
-        assert model.context_length == 128000
-        assert model.max_output == 16384
+        model = openai_provider._format_model("gpt-5.6-sol")
+        assert model.context_length == 1_050_000
+        assert model.max_output == 131072
         assert model.supports_tools is True
         assert model.supports_vision is True
 
