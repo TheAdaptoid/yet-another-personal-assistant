@@ -4,8 +4,8 @@ from datetime import datetime
 from pathlib import Path
 
 from yapa.config import get_config
-from yapa.models import Session
-from yapa.storage import GenericStore
+from yapa.models import Message, Session
+from yapa.storage import GenericStore, StorageReadError
 
 
 class SessionService:
@@ -29,7 +29,7 @@ class SessionService:
         Create a new session.
 
         Args:
-            title: Optional title. Defaults to "New Session".
+            title: Optional title. Defaults to "Untitled Session".
 
         Returns:
             The new session.
@@ -80,7 +80,7 @@ class SessionService:
         """
         try:
             return self._store.load(session_id)
-        except FileNotFoundError as e:
+        except (FileNotFoundError, StorageReadError) as e:
             raise ValueError(str(e)) from e
 
     def rename(self, session_id: str, title: str) -> Session:
@@ -99,9 +99,55 @@ class SessionService:
         """
         try:
             session = self._store.load(session_id)
-        except FileNotFoundError as e:
+        except (FileNotFoundError, StorageReadError) as e:
             raise ValueError(str(e)) from e
         session.title = title
+        self._store.save(session, overwrite=True)
+        return session
+
+    def add_message(self, session_id: str, message: Message) -> Session:
+        """
+        Add a message to a session and persist.
+
+        Args:
+            session_id: The session ID.
+            message: The message to add.
+
+        Returns:
+            Updated Session.
+
+        Raises:
+            ValueError: If no session with the given ID is found.
+        """
+        try:
+            session = self._store.load(session_id)
+        except (FileNotFoundError, StorageReadError) as e:
+            raise ValueError(str(e)) from e
+        session.messages.append(message)
+        session.touch()
+        self._store.save(session, overwrite=True)
+        return session
+
+    def add_messages(self, session_id: str, messages: list[Message]) -> Session:
+        """
+        Add multiple messages to a session atomically and persist.
+
+        Args:
+            session_id: The session ID.
+            messages: The messages to add.
+
+        Returns:
+            Updated Session.
+
+        Raises:
+            ValueError: If no session with the given ID is found.
+        """
+        try:
+            session = self._store.load(session_id)
+        except (FileNotFoundError, StorageReadError) as e:
+            raise ValueError(str(e)) from e
+        session.messages.extend(messages)
+        session.touch()
         self._store.save(session, overwrite=True)
         return session
 

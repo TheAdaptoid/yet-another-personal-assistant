@@ -5,7 +5,8 @@ from datetime import datetime, timezone
 
 import pytest
 
-from yapa.services import SessionService
+from yapa.models import AssistantMessage, UserMessage
+from yapa.services.session import SessionService
 
 
 class TestCreate:
@@ -44,6 +45,13 @@ class TestGetSession:
         service = SessionService(storage_dir=tmp_path)
         with pytest.raises(ValueError, match="not found"):
             service.get_session("nonexistent")
+
+    def test_corrupt_session(self, tmp_path):
+        service = SessionService(storage_dir=tmp_path)
+        bad_file = tmp_path / "corrupt.json"
+        bad_file.write_text("{bad json")
+        with pytest.raises(ValueError, match="Failed to load"):
+            service.get_session("corrupt")
 
 
 class TestListSessions:
@@ -110,6 +118,13 @@ class TestRename:
         with pytest.raises(ValueError, match="not found"):
             service.rename("nonexistent", "new title")
 
+    def test_corrupt_session(self, tmp_path):
+        service = SessionService(storage_dir=tmp_path)
+        bad_file = tmp_path / "corrupt.json"
+        bad_file.write_text("{bad json")
+        with pytest.raises(ValueError, match="Failed to load"):
+            service.rename("corrupt", "new title")
+
 
 class TestDelete:
     """Tests for SessionService.delete()."""
@@ -124,3 +139,83 @@ class TestDelete:
         service = SessionService(storage_dir=tmp_path)
         with pytest.raises(ValueError, match="not found"):
             service.delete("nonexistent")
+
+
+class TestAddMessage:
+    """Tests for SessionService.add_message()."""
+
+    def test_adds_message(self, tmp_path):
+        service = SessionService(storage_dir=tmp_path)
+        session = service.create()
+        msg = UserMessage(content="hello")
+        updated = service.add_message(str(session.id), msg)
+        assert len(updated.messages) == 1
+        assert updated.messages[0].content == "hello"
+
+    def test_persists_message(self, tmp_path):
+        service = SessionService(storage_dir=tmp_path)
+        session = service.create()
+        msg = UserMessage(content="hello")
+        service.add_message(str(session.id), msg)
+        loaded = service.get_session(str(session.id))
+        assert len(loaded.messages) == 1
+        assert loaded.messages[0].content == "hello"
+
+    def test_adds_multiple_individually(self, tmp_path):
+        service = SessionService(storage_dir=tmp_path)
+        session = service.create()
+        service.add_message(str(session.id), UserMessage(content="hi"))
+        service.add_message(
+            str(session.id), AssistantMessage(content="hey", model="m")
+        )
+        loaded = service.get_session(str(session.id))
+        assert len(loaded.messages) == 2
+
+    def test_missing_session(self, tmp_path):
+        service = SessionService(storage_dir=tmp_path)
+        with pytest.raises(ValueError, match="not found"):
+            service.add_message("nonexistent", UserMessage(content="hi"))
+
+
+class TestAddMessages:
+    """Tests for SessionService.add_messages()."""
+
+    def test_adds_multiple_atomically(self, tmp_path):
+        service = SessionService(storage_dir=tmp_path)
+        session = service.create()
+        msgs = [
+            UserMessage(content="hello"),
+            AssistantMessage(content="world", model="m"),
+        ]
+        updated = service.add_messages(str(session.id), msgs)
+        assert len(updated.messages) == 2
+        assert updated.messages[0].content == "hello"
+        assert updated.messages[1].content == "world"
+
+    def test_persists_all(self, tmp_path):
+        service = SessionService(storage_dir=tmp_path)
+        session = service.create()
+        msgs = [
+            UserMessage(content="q1"),
+            AssistantMessage(content="a1", model="m"),
+            UserMessage(content="q2"),
+            AssistantMessage(content="a2", model="m"),
+        ]
+        service.add_messages(str(session.id), msgs)
+        loaded = service.get_session(str(session.id))
+        assert len(loaded.messages) == 4
+
+    def test_missing_session(self, tmp_path):
+        service = SessionService(storage_dir=tmp_path)
+        with pytest.raises(ValueError, match="not found"):
+            service.add_messages("nonexistent", [UserMessage(content="hi")])
+
+    def test_does_not_mutate_on_missing_session(self, tmp_path):
+        """Should not persist anything if the session does not exist."""
+        service = SessionService(storage_dir=tmp_path)
+        session = service.create()
+        msgs = [UserMessage(content="should-not-save")]
+        with pytest.raises(ValueError):
+            service.add_messages("nonexistent", msgs)
+        loaded = service.get_session(str(session.id))
+        assert len(loaded.messages) == 0

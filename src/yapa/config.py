@@ -20,6 +20,8 @@ DEFAULT_LOG_LEVEL = "INFO"
 DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_LMSTUDIO_BASE_URL = "http://localhost:1234/v1"
 DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434/v1"
+DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
+DEFAULT_PROVIDER_TIMEOUT = 120
 
 UNSET = "NOT_SET"
 
@@ -52,10 +54,20 @@ class Config(BaseModel):
     lmstudio_base_url: str = DEFAULT_LMSTUDIO_BASE_URL
     ollama_api_key: str = UNSET
     ollama_base_url: str = DEFAULT_OLLAMA_BASE_URL
+    openai_api_key: str = UNSET
+    openai_base_url: str = DEFAULT_OPENAI_BASE_URL
     default_model: str = DEFAULT_MODEL
     data_dir: Path = Field(default_factory=lambda: DEFAULT_DATA_DIR)
     storage_dir: Path = Field(default_factory=lambda: DEFAULT_STORAGE_DIR)
     database_path: Path = Field(default_factory=lambda: DEFAULT_DATABASE_PATH)
+    provider_timeout: int = Field(
+        default=DEFAULT_PROVIDER_TIMEOUT, ge=1,
+        description="Timeout in seconds for provider API calls",
+    )
+    provider_max_retries: int = Field(
+        default=2, ge=0,
+        description="Maximum number of retries for provider API calls",
+    )
     log_level: str = Field(
         default=DEFAULT_LOG_LEVEL, pattern="^(DEBUG|INFO|WARNING|ERROR)$"
     )
@@ -89,9 +101,13 @@ def load_config(path: Path | None = None) -> Config:
         "lmstudio_base_url": os.environ.get("LMSTUDIO_BASE_URL"),
         "ollama_api_key": os.environ.get("OLLAMA_API_KEY"),
         "ollama_base_url": os.environ.get("OLLAMA_BASE_URL"),
+        "openai_api_key": os.environ.get("OPENAI_API_KEY"),
+        "openai_base_url": os.environ.get("OPENAI_BASE_URL"),
         "default_model": os.environ.get("YAPA_DEFAULT_MODEL"),
         "data_dir": os.environ.get("YAPA_DATA_DIR"),
         "database_path": os.environ.get("YAPA_DATABASE_PATH"),
+        "provider_timeout": os.environ.get("YAPA_PROVIDER_TIMEOUT"),
+        "provider_max_retries": os.environ.get("YAPA_PROVIDER_MAX_RETRIES"),
         "log_level": os.environ.get("YAPA_LOG_LEVEL"),
     }
 

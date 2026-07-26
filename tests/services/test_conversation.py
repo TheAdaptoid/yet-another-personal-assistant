@@ -97,9 +97,8 @@ class TestStreamResponse:
         async for delta in service.stream_response("hello"):
             results.append(delta)
 
-        assert len(results) == 2
+        assert len(results) == 1
         assert results[0].content == "Hi!"
-        assert results[-1].done is True
 
     async def test_saves_user_and_assistant_messages(
         self, mock_provider_service, store, config
@@ -166,7 +165,7 @@ class TestStreamResponse:
         provider = mock_provider_service.get_provider_by_model.return_value
 
         async def _empty(model, messages, params=None):
-            yield StreamDelta(content=None, reasoning_content=None, done=True)
+            yield StreamDelta(content=None)
 
         provider.invoke_llm_stream = _empty
 
@@ -190,9 +189,8 @@ class TestStreamResponse:
         provider = mock_provider_service.get_provider_by_model.return_value
 
         async def _chunky(model, messages, params=None):
-            yield StreamDelta(content="Hello", reasoning_content=None, done=False)
-            yield StreamDelta(content=" world", reasoning_content=None, done=False)
-            yield StreamDelta(content=None, reasoning_content=None, done=True)
+            yield StreamDelta(content="Hello")
+            yield StreamDelta(content=" world")
 
         provider.invoke_llm_stream = _chunky
 

@@ -224,8 +224,7 @@ class ConversationService:
                 the conversation's current model is used.
 
         Yields:
-            StreamDelta for each chunk of the assistant response. A final
-            delta with done=True is yielded after persistence.
+            StreamDelta for each chunk of the assistant response.
 
         Raises:
             ConversationError: If the model invocation fails or returns an
@@ -250,8 +249,7 @@ class ConversationService:
                     content_buffer += delta.content
                 if delta.reasoning_content:
                     reasoning_buffer += delta.reasoning_content
-                if not delta.done:
-                    yield delta
+                yield delta
         except ModelInvocationError as e:
             raise ConversationError("Model invocation failed") from e
 
@@ -265,5 +263,3 @@ class ConversationService:
         )
         self._save_message(user_msg)
         self._save_message(assistant_msg)
-
-        yield StreamDelta(content=None, reasoning_content=None, done=True)

@@ -2,6 +2,8 @@
 
 from yapa.models import (
     AssistantMessage,
+    ModelData,
+    ModelType,
     Session,
     SystemMessage,
     UserMessage,
@@ -42,3 +44,34 @@ class TestJsonRoundTrip:
         assert isinstance(restored.messages[0], SystemMessage)
         assert isinstance(restored.messages[1], UserMessage)
         assert isinstance(restored.messages[2], AssistantMessage)
+
+
+class TestModelField:
+    """Session.model field serializes and deserializes correctly."""
+
+    def test_defaults_to_none(self):
+        session = Session()
+        assert session.model is None
+
+    def test_round_trip(self):
+        model = ModelData(id="gpt-4o", provider_id="openai", type=ModelType.LLM)
+        session = Session(model=model)
+        data = session.model_dump(mode="json")
+        restored = Session(**data)
+        assert restored.model is not None
+        assert restored.model.id == "gpt-4o"
+        assert restored.model.provider_id == "openai"
+        assert restored.model.type == ModelType.LLM
+
+    def test_none_omits_from_json(self):
+        session = Session()
+        data = session.model_dump(mode="json")
+        assert data.get("model") is None
+
+    def test_serializes_as_object(self):
+        model = ModelData(id="claude-3", provider_id="anthropic", type=ModelType.LLM)
+        session = Session(model=model)
+        data = session.model_dump(mode="json")
+        assert isinstance(data["model"], dict)
+        assert data["model"]["id"] == "claude-3"
+        assert data["model"]["provider_id"] == "anthropic"

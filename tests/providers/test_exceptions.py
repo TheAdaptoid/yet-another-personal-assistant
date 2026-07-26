@@ -6,6 +6,7 @@ from yapa.providers.exceptions import (
     InferenceProviderError,
     ModelInvocationError,
     ModelsFetchError,
+    ModelTypeError,
 )
 
 
@@ -40,3 +41,14 @@ class TestModelInvocationError:
     def test_can_be_raised(self) -> None:
         with pytest.raises(ModelInvocationError):
             raise ModelInvocationError("invoke failed")
+
+
+class TestModelTypeError:
+    """Tests for ModelTypeError."""
+
+    def test_inherits_from_inference_provider_error(self) -> None:
+        assert issubclass(ModelTypeError, InferenceProviderError)
+
+    def test_can_be_raised(self) -> None:
+        with pytest.raises(ModelTypeError):
+            raise ModelTypeError("not an LLM")
