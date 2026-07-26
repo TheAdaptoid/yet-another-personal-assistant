@@ -107,6 +107,7 @@ def load_config(path: Path | None = None) -> Config:
         "data_dir": os.environ.get("YAPA_DATA_DIR"),
         "database_path": os.environ.get("YAPA_DATABASE_PATH"),
         "provider_timeout": os.environ.get("YAPA_PROVIDER_TIMEOUT"),
+        "provider_max_retries": os.environ.get("YAPA_PROVIDER_MAX_RETRIES"),
         "log_level": os.environ.get("YAPA_LOG_LEVEL"),
     }
 

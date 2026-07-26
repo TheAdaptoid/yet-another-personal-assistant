@@ -21,7 +21,14 @@ from yapa.providers.openai import OpenAIIP
 from yapa.providers.openai_compat import OpenAICompatibleProvider
 
 
-def _chunk(content=None, reasoning_content=None, tool_calls=None, **extra):
+def _chunk(
+    content=None,
+    reasoning_content=None,
+    tool_calls=None,
+    finish_reason=None,
+    usage=None,
+    **extra,
+):
     attrs = {
         "content": content,
         "reasoning_content": reasoning_content,
@@ -29,8 +36,8 @@ def _chunk(content=None, reasoning_content=None, tool_calls=None, **extra):
     }
     attrs.update(extra)
     delta = SimpleNamespace(**attrs)
-    choice = SimpleNamespace(delta=delta)
-    return SimpleNamespace(choices=[choice])
+    choice = SimpleNamespace(delta=delta, finish_reason=finish_reason)
+    return SimpleNamespace(choices=[choice], usage=usage)
 
 
 async def _stream(*chunks):
@@ -380,6 +387,57 @@ class TestStreamChatImpl:
         assert kwargs["max_tokens"] == 100
         assert kwargs["top_p"] == 0.9
         assert kwargs["stream"] is True
+        assert kwargs["stream_options"] == {"include_usage": True}
+
+    async def test_yields_finish_reason(self, compat_provider) -> None:
+        chunk = _chunk(content="done", reasoning_content=None, finish_reason="stop")
+        stream = _stream(chunk)
+        mock_create = AsyncMock(return_value=stream)
+        compat_provider._client.chat.completions.create = mock_create
+
+        results: list[StreamDelta] = []
+        async for delta in compat_provider._stream_chat_impl(
+            model_id="gpt-4",
+            messages=[UserMessage(content="hi")],
+        ):
+            results.append(delta)
+
+        assert results[0].finish_reason == "stop"
+
+    async def test_yields_usage(self, compat_provider) -> None:
+        usage = SimpleNamespace(
+            prompt_tokens=10, completion_tokens=20, total_tokens=30
+        )
+        chunk = _chunk(content="done", reasoning_content=None, usage=usage)
+        stream = _stream(chunk)
+        mock_create = AsyncMock(return_value=stream)
+        compat_provider._client.chat.completions.create = mock_create
+
+        results: list[StreamDelta] = []
+        async for delta in compat_provider._stream_chat_impl(
+            model_id="gpt-4",
+            messages=[UserMessage(content="hi")],
+        ):
+            results.append(delta)
+
+        assert results[0].usage is not None
+        assert results[0].usage.prompt_tokens == 10
+        assert results[0].usage.total_tokens == 30
+
+    async def test_no_metadata_when_not_in_response(self, compat_provider) -> None:
+        stream = _stream(_chunk(content="ok", reasoning_content=None))
+        mock_create = AsyncMock(return_value=stream)
+        compat_provider._client.chat.completions.create = mock_create
+
+        results: list[StreamDelta] = []
+        async for delta in compat_provider._stream_chat_impl(
+            model_id="gpt-4",
+            messages=[UserMessage(content="hi")],
+        ):
+            results.append(delta)
+
+        assert results[0].usage is None
+        assert results[0].finish_reason is None
 
 
 class TestOpenAIModelMetadata:
@@ -429,14 +487,16 @@ class TestOpenAIModelMetadata:
 class TestStaticChatImpl:
     """Tests for OpenAICompatibleProvider._static_chat_impl()."""
 
-    def _make_response(self, content="Hello", reasoning_content=None, tool_calls=None):
+    def _make_response(
+        self, content="Hello", reasoning_content=None, tool_calls=None, usage=None
+    ):
         message = SimpleNamespace(
             content=content,
             reasoning_content=reasoning_content,
             tool_calls=tool_calls,
         )
         choice = SimpleNamespace(message=message)
-        return SimpleNamespace(choices=[choice])
+        return SimpleNamespace(choices=[choice], usage=usage)
 
     async def test_returns_assistant_message(self, compat_provider) -> None:
         response = self._make_response(content="Hello world")
@@ -518,3 +578,31 @@ class TestStaticChatImpl:
         )
 
         assert result.content is None
+
+    async def test_returns_usage(self, compat_provider) -> None:
+        usage = SimpleNamespace(
+            prompt_tokens=10, completion_tokens=20, total_tokens=30
+        )
+        response = self._make_response(content="Hello", usage=usage)
+        mock_create = AsyncMock(return_value=response)
+        compat_provider._client.chat.completions.create = mock_create
+
+        result = await compat_provider._static_chat_impl(
+            model_id="gpt-4",
+            messages=[UserMessage(content="hi")],
+        )
+
+        assert result.usage is not None
+        assert result.usage.total_tokens == 30
+
+    async def test_no_usage_when_not_in_response(self, compat_provider) -> None:
+        response = self._make_response(content="Hello")
+        mock_create = AsyncMock(return_value=response)
+        compat_provider._client.chat.completions.create = mock_create
+
+        result = await compat_provider._static_chat_impl(
+            model_id="gpt-4",
+            messages=[UserMessage(content="hi")],
+        )
+
+        assert result.usage is None

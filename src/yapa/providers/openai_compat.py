@@ -24,6 +24,7 @@ from yapa.models import (
     ModelData,
     ModelType,
     StreamDelta,
+    TokenUsage,
     ToolCall,
     ToolCallDelta,
     ToolMessage,
@@ -176,6 +177,8 @@ class OpenAICompatibleProvider(InferenceProvider, ABC):
             top_p=params.top_p,
             stream=stream,
         )
+        if stream:
+            kwargs["stream_options"] = {"include_usage": True}
         formatted_tools = self._format_tools(tools)
         if formatted_tools is not None:
             kwargs["tools"] = formatted_tools
@@ -217,10 +220,22 @@ class OpenAICompatibleProvider(InferenceProvider, ABC):
                         )
                     )
 
+            finish_reason: str | None = chunk.choices[0].finish_reason
+
+            usage: TokenUsage | None = None
+            if chunk.usage is not None:
+                usage = TokenUsage(
+                    prompt_tokens=chunk.usage.prompt_tokens,
+                    completion_tokens=chunk.usage.completion_tokens,
+                    total_tokens=chunk.usage.total_tokens,
+                )
+
             yield StreamDelta(
                 content=content,
                 reasoning_content=reasoning_content,
                 tool_calls=tool_call_deltas,
+                finish_reason=finish_reason,
+                usage=usage,
             )
 
     async def _static_chat_impl(
@@ -259,9 +274,18 @@ class OpenAICompatibleProvider(InferenceProvider, ABC):
                     )
                 )
 
+        usage: TokenUsage | None = None
+        if response.usage is not None:
+            usage = TokenUsage(
+                prompt_tokens=response.usage.prompt_tokens,
+                completion_tokens=response.usage.completion_tokens,
+                total_tokens=response.usage.total_tokens,
+            )
+
         return AssistantMessage(
             role="assistant",
             content=content,
             reasoning_content=reasoning_content,
             tool_calls=tool_calls,
+            usage=usage,
         )
