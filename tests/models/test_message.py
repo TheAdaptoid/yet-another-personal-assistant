@@ -2,7 +2,13 @@
 
 from pydantic import TypeAdapter
 
-from yapa.models import AssistantMessage, Message, SystemMessage, TokenUsage, UserMessage
+from yapa.models import (
+    AssistantMessage,
+    Message,
+    SystemMessage,
+    TokenUsage,
+    UserMessage,
+)
 
 _adapter = TypeAdapter(Message)
 

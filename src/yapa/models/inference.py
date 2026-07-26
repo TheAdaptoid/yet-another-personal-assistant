@@ -65,9 +65,7 @@ class ModelData(BaseModel):
     context_length: int | None = Field(
         default=None, description="Maximum context length in tokens"
     )
-    max_output: int | None = Field(
-        default=None, description="Maximum output tokens"
-    )
+    max_output: int | None = Field(default=None, description="Maximum output tokens")
     supports_tools: bool = Field(
         default=False, description="Whether the model supports tool/function calling"
     )
@@ -76,16 +74,14 @@ class ModelData(BaseModel):
     )
     pricing: dict[str, float] | None = Field(
         default=None,
-        description="Per-token pricing in USD per million tokens, e.g. {'input': 2.50, 'output': 10.00}",
+        description=(
+            "Per-token pricing in USD per million tokens,"
+            " e.g. {'input': 2.50, 'output': 10.00}"
+        ),
     )
 
     # Immutable and strict model configuration
     model_config = ConfigDict(extra="forbid", frozen=True)
-
-    @property
-    def full_id(self) -> str:
-        """Returns a combined identifier for the provider and model IDs."""
-        return f"{self.provider_id}:{self.id}"
 
 
 class ToolCallDelta(BaseModel):
@@ -142,5 +138,6 @@ class StreamDelta(BaseModel):
         description="Why the stream finished: stop, length, content_filter, tool_calls",
     )
     usage: TokenUsage | None = Field(
-        default=None, description="Token usage for the completed stream",
+        default=None,
+        description="Token usage for the completed stream",
     )
