@@ -14,7 +14,7 @@ from yapa.models import (
 )
 from yapa.tools import Tool
 
-from .exceptions import ModelInvocationError, ModelsFetchError
+from .exceptions import ModelInvocationError, ModelsFetchError, ModelTypeError
 
 
 class InferenceProvider(ABC):
@@ -106,6 +106,7 @@ class InferenceProvider(ABC):
             StreamDelta chunks from the model response.
 
         Raises:
+            ModelTypeError: If the model is not an LLM.
             ModelInvocationError: If model invocation fails.
         """
         self._pre_invoke_check(model)
@@ -148,6 +149,7 @@ class InferenceProvider(ABC):
             The complete assistant response.
 
         Raises:
+            ModelTypeError: If the model is not an LLM.
             ModelInvocationError: If model invocation fails.
         """
         self._pre_invoke_check(model)
@@ -169,7 +171,7 @@ class InferenceProvider(ABC):
 
     def _pre_invoke_check(self, model: ModelData) -> None:
         if model.type != ModelType.LLM:
-            raise ModelInvocationError(f"Model '{model.id}' is not an LLM.")
+            raise ModelTypeError(f"Model '{model.id}' is not an LLM.")
 
     # ── Private implementation methods ──
 

@@ -1,7 +1,12 @@
 """Inference provider implementations."""
 
 from .base import InferenceProvider
-from .exceptions import InferenceProviderError, ModelInvocationError, ModelsFetchError
+from .exceptions import (
+    InferenceProviderError,
+    ModelInvocationError,
+    ModelsFetchError,
+    ModelTypeError,
+)
 from .lmstudio import LMStudioIP
 from .ollama import OllamaIP
 from .openai import OpenAIIP
@@ -22,6 +27,7 @@ __all__ = [
     "LMStudioIP",
     "ModelInvocationError",
     "ModelsFetchError",
+    "ModelTypeError",
     "OllamaIP",
     "OpenAIIP",
     "OpenRouterProvider",

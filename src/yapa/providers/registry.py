@@ -71,13 +71,8 @@ class ProviderRegistry:
 
         Raises:
             ProviderNotAvailableError: If the provider is not available
-                (unregistered, unconfigured, or failed to initialize).
+                (unregistered or failed to initialize).
         """
-        if provider_id in self._failures:
-            raise ProviderNotAvailableError(
-                f"Provider '{provider_id}' is not configured: "
-                f"{self._failures[provider_id]}"
-            )
         try:
             return self._available[provider_id]
         except KeyError:
