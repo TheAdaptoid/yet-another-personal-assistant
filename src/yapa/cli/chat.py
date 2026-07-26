@@ -118,21 +118,19 @@ async def _stream_response(
                 if chunk.content:
                     content_buffer += chunk.content
 
-                if chunk.done:
-                    if had_reasoning and not last_reasoning_chunk.endswith("\n"):
-                        reasoning_buffer += "\n"
-                    renderables = _build_renderables(
-                        reasoning_buffer, content_buffer
-                    )
-                    if renderables:
-                        live.update(Group(*renderables))
-                    break
-
                 renderables = _build_renderables(
                     reasoning_buffer, content_buffer
                 )
                 if renderables:
                     live.update(Group(*renderables))
+
+            if had_reasoning and not last_reasoning_chunk.endswith("\n"):
+                reasoning_buffer += "\n"
+            renderables = _build_renderables(
+                reasoning_buffer, content_buffer
+            )
+            if renderables:
+                live.update(Group(*renderables))
     except ConversationError as e:
         con.print(" " * 20, end="\r")
         con.print(f"[red]{e}[/red]")

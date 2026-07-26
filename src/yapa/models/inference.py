@@ -116,7 +116,6 @@ class StreamDelta(BaseModel):
         tool_calls (list[ToolCallDelta]): A list of tool call deltas associated with
             this stream delta.
         error (str | None): Error message if an error occurred during streaming.
-        done (bool): Whether this delta represents the end of the stream.
         finish_reason (str | None): Why the stream finished (stop, length,
             content_filter, tool_calls).
         usage (TokenUsage | None): Token usage for the completed stream.
@@ -134,9 +133,6 @@ class StreamDelta(BaseModel):
     )
     error: str | None = Field(
         default=None, description="Error message if an error occurred during streaming"
-    )
-    done: bool = Field(
-        default=False, description="Whether this delta represents the end of the stream"
     )
     finish_reason: str | None = Field(
         default=None,

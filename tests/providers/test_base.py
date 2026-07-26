@@ -44,8 +44,7 @@ class _TestProvider(InferenceProvider):
         self.last_stream_messages = messages
         self.last_stream_tools = tools
         self.last_stream_params = params
-        yield StreamDelta(content="hello", done=False)
-        yield StreamDelta(content=None, done=True)
+        yield StreamDelta(content="hello")
 
     async def _static_chat_impl(
         self,
@@ -156,7 +155,7 @@ class TestStreamChat:
         results: list[StreamDelta] = []
         async for delta in provider.stream_chat(model, sample_messages):
             results.append(delta)
-        assert len(results) == 2
+        assert len(results) == 1
         assert results[0].content == "hello"
 
     async def test_passes_arguments(

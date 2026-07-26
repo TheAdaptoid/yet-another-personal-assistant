@@ -41,12 +41,11 @@ class TestStreamDelta:
     """StreamDelta — JSON round-trip."""
 
     def test_json_round_trip(self):
-        sd = StreamDelta(content="hello", reasoning_content="thinking", done=True)
+        sd = StreamDelta(content="hello", reasoning_content="thinking")
         data = sd.model_dump(mode="json")
         restored = StreamDelta(**data)
         assert restored.content == "hello"
         assert restored.reasoning_content == "thinking"
-        assert restored.done is True
 
 
 class TestTokenUsage:

@@ -27,8 +27,7 @@ def mock_provider():
     provider = MagicMock()
 
     async def _invoke(model, messages, params=None):
-        yield StreamDelta(content="Hi!", reasoning_content=None, done=False)
-        yield StreamDelta(content=None, reasoning_content=None, done=True)
+        yield StreamDelta(content="Hi!")
 
     provider.invoke_llm_stream = _invoke
     provider.get_model = AsyncMock()

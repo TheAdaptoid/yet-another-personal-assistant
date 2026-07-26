@@ -55,7 +55,7 @@ class TestRunConversation:
         ]
 
         async def _stream(model, messages):
-            yield StreamDelta(content=None, done=True)
+            yield StreamDelta()
 
         svc.stream_response = _stream
         svc.close = AsyncMock()
@@ -104,7 +104,7 @@ class TestRunConversation:
         mock_provider = MagicMock()
 
         async def _invoke(model, messages, params=None):
-            yield StreamDelta(content=None, reasoning_content=None, done=True)
+            yield StreamDelta()
 
         mock_provider.invoke_llm_stream = _invoke
 
@@ -139,8 +139,7 @@ class TestRunConversation:
         mock_console.input.side_effect = ["hello", "/exit"]
 
         async def _stream(prompt, model=None):
-            yield StreamDelta(content="Hi!", done=False)
-            yield StreamDelta(content=None, done=True)
+            yield StreamDelta(content="Hi!")
 
         mock_service.stream_response = _stream
         mock_service.auto_title = AsyncMock(return_value="My Title")
@@ -196,8 +195,7 @@ class TestRunConversation:
         mock_console.input.side_effect = ["exit", "/exit"]
 
         async def _stream(prompt, model=None):
-            yield StreamDelta(content="echo", done=False)
-            yield StreamDelta(content=None, done=True)
+            yield StreamDelta(content="echo")
 
         mock_service.stream_response = _stream
         await run_conversation(
@@ -230,7 +228,7 @@ class TestSlashCommands:
         svc.auto_title = AsyncMock(return_value=None)
 
         async def _done(model, messages):
-            yield StreamDelta(content=None, done=True)
+            yield StreamDelta()
 
         svc.stream_response = _done
         svc.resolve_model = AsyncMock(
