@@ -3,197 +3,116 @@
 from yapa.logging import get_logger
 from yapa.models import ModelData, ModelType
 from yapa.providers import (
-    DEFAULT_PROVIDERS,
+    DEFAULT_PROVIDER_CLASSES,
     InferenceProvider,
     ModelsFetchError,
+    ProviderRegistry,
 )
 
 logger = get_logger(__name__)
 
 
 class ProviderService:
-    """Service for managing inference providers and models."""
+    """Thin service wrapping ProviderRegistry with model-fetching utilities."""
 
-    def __init__(self, providers: list[type[InferenceProvider]] | None = None) -> None:
-        """Initialize the provider service."""
-        self._provider_cache: dict[str, InferenceProvider] = {}
-        self.refresh_providers(providers=providers)
-
-    def refresh_providers(
-        self, providers: list[type[InferenceProvider]] | None = None
-    ) -> None:
+    def __init__(self, registry: ProviderRegistry | None = None) -> None:
         """
-        Refresh the provider cache with a new list of providers.
+        Initialize the provider service.
 
         Args:
-            providers: Optional list of provider classes to refresh with. If None,
-                will use DEFAULT_PROVIDERS.
+            registry: Provider registry. Defaults to a new ProviderRegistry
+                with DEFAULT_PROVIDER_CLASSES.
         """
-        self._provider_cache.clear()
-        for provider_cls in providers if providers is not None else DEFAULT_PROVIDERS:
-            try:
-                provider_instance = provider_cls()  # ty: ignore
-                self._provider_cache[provider_instance.id] = provider_instance
-            except ValueError as e:
-                logger.warning(
-                    f"Failed to initialize provider {provider_cls.__name__}: {e}"
-                )
-                continue
-
-    def list_providers(self) -> list[InferenceProvider]:
-        """
-        List all available inference providers.
-
-        Returns:
-            list[InferenceProvider]: A list of all available inference provider
-                instances.
-        """
-        return list(self._provider_cache.values())
+        self._registry = registry or ProviderRegistry(DEFAULT_PROVIDER_CLASSES)
 
     def get_provider(self, provider_id: str) -> InferenceProvider:
         """
-        Get an inference provider by its identifier.
+        Get a provider by its identifier.
 
         Args:
-            provider_id (str): The unique identifier of the provider to retrieve.
+            provider_id: The provider identifier.
 
         Returns:
-            InferenceProvider: An instance of the requested inference provider.
+            The provider instance.
 
         Raises:
-            ValueError: If no provider with the given ID is found.
+            ProviderNotAvailableError: If the provider is not available.
         """
-        provider = self._provider_cache.get(provider_id)
-        if not provider:
-            raise ValueError(f"Provider '{provider_id}' not found")
-        return provider
+        return self._registry.get(provider_id)
 
     def get_provider_by_model(self, model: ModelData) -> InferenceProvider:
         """
-        Get an inference provider that supports a given model.
+        Get the provider that serves a given model.
 
         Args:
-            model (ModelData): The model to find a provider for.
+            model: The model to find a provider for.
 
         Returns:
-            InferenceProvider: An instance of the provider that supports the
-                given model.
+            The provider instance.
 
         Raises:
-            ValueError: If no provider supports the given model.
+            ProviderNotAvailableError: If no provider serves this model.
         """
-        provider = self._provider_cache.get(model.provider_id)
-        if not provider:
-            raise ValueError(f"No provider found that supports model '{model.id}'")
-        return provider
-
-    def get_provider_by_model_full_id(self, model_full_id: str) -> InferenceProvider:
-        """
-        Get an inference provider that supports a given model.
-
-        This method expects the model_id to be in the format
-        "provider_id:model_specific_id". This format can be obtained from the `full_id`
-        property of the `ModelData` object.
-
-        Args:
-            model_full_id (str): The full identifier of the model to look up.
-
-        Returns:
-            The InferenceProvider that serves this model.
-
-        Raises:
-            ValueError: If no provider serves the given model ID.
-        """
-        provider_id, model_id = model_full_id.split(":", 1)
-        provider = self._provider_cache.get(provider_id)
-        if not provider:
-            raise ValueError(f"No provider found that supports model '{model_id}'")
-        return provider
-
-    async def _list_models_all_providers(
-        self, model_type: ModelType | None = None
-    ) -> dict[str, list[ModelData]]:
-        """
-        Get a list of available models for all providers.
-
-        Args:
-            model_type (ModelType | None): Optional filter to only include models of a
-                specific type (e.g., LLM). If None, all model types are included.
-
-        Returns:
-            dict[str, list[ModelData]]: A dictionary mapping provider IDs to lists of
-                available models.
-        """
-        all_models = {}
-        for pid, provider in self._provider_cache.items():
-            try:
-                models = await provider.list_models(model_type)
-                all_models[pid] = models
-            except ModelsFetchError as e:
-                logger.error(f"Failed to fetch models for provider '{pid}': {e}")
-                all_models[pid] = []
-        return all_models
-
-    async def _list_models_single_provider(
-        self, provider_id: str, model_type: ModelType | None = None
-    ) -> dict[str, list[ModelData]]:
-        """
-        Get a list of available models for a specific provider.
-
-        Args:
-            provider_id (str): The ID of the provider to get models for.
-            model_type (ModelType | None): Optional filter to only include models of a
-                specific type (e.g., LLM). If None, all model types are included.
-
-        Returns:
-            dict[str, list[ModelData]]: A dictionary with a single key (the provider ID)
-                mapping to a list of available models for that provider.
-        """
-        provider = self.get_provider(provider_id)
-        try:
-            models = await provider.list_models(model_type)
-            return {provider_id: models}
-        except ModelsFetchError as e:
-            logger.error(f"Failed to fetch models for provider '{provider_id}': {e}")
-            return {provider_id: []}
+        return self._registry.get(model.provider_id)
 
     async def list_models(
-        self, provider_id: str | None = None, model_type: ModelType | None = None
+        self,
+        provider_id: str | None = None,
+        model_type: ModelType | None = None,
     ) -> dict[str, list[ModelData]]:
         """
-        Get a list of available models for a specific provider or all providers.
+        Fetch available models from one or all providers.
 
         Args:
-            provider_id (str | None): The ID of the provider to get models for, or
-                None to get models for all providers.
-            model_type (ModelType | None): Optional filter to only include models of a
-                specific type (e.g., LLM). If None, all model types are included.
+            provider_id: If set, fetch only from this provider.
+            model_type: Optional filter to only include models of a
+                specific type.
 
         Returns:
-            dict[str, list[ModelData]]: A dictionary mapping provider IDs to lists of
-                available models.
+            Dict mapping provider IDs to lists of models.
         """
         if provider_id:
-            return await self._list_models_single_provider(provider_id, model_type)
-        else:
-            return await self._list_models_all_providers(model_type)
+            provider = self.get_provider(provider_id)
+            try:
+                models = await provider.list_models(model_type)
+                return {provider_id: models}
+            except ModelsFetchError as e:
+                logger.error(f"Failed to fetch models for '{provider_id}': {e}")
+                return {provider_id: []}
+
+        result: dict[str, list[ModelData]] = {}
+        for provider in self._registry.available:
+            try:
+                models = await provider.list_models(model_type)
+                result[provider.id] = models
+            except ModelsFetchError as e:
+                logger.error(f"Failed to fetch models for '{provider.id}': {e}")
+                result[provider.id] = []
+        return result
 
     async def get_model(self, model_full_id: str) -> ModelData:
         """
-        Get detailed information about a specific model by its full ID.
+        Fetch details for a specific model.
 
         Args:
-            model_full_id (str): The full identifier of the model to retrieve, in the
-                format "provider_id:model_specific_id".
+            model_full_id: Full model ID in ``provider_id:model_id`` format.
 
         Returns:
-            ModelData: Detailed information about the specified model.
+            ModelData for the requested model.
 
         Raises:
-            ValueError: If no provider supports the given model ID or if fetching the
-                model fails.
+            ValueError: If the full ID is malformed.
+            ProviderNotAvailableError: If the provider is not available.
+            ValueError: If the model fetch fails.
         """
-        provider_id, model_id = model_full_id.split(":", 1)
+        try:
+            provider_id, model_id = model_full_id.split(":", 1)
+        except ValueError:
+            raise ValueError(
+                f"Invalid model full ID '{model_full_id}': "
+                "expected 'provider_id:model_id'"
+            )
+
         provider = self.get_provider(provider_id)
         try:
             return await provider.get_model(model_id=model_id)

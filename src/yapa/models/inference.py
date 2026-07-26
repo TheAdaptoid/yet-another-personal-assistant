@@ -80,6 +80,11 @@ class ModelData(BaseModel):
         ),
     )
 
+    @property
+    def full_id(self) -> str:
+        """Return the fully-qualified model identifier (e.g. ``openai:gpt-4``)."""
+        return f"{self.provider_id}:{self.id}"
+
     # Immutable and strict model configuration
     model_config = ConfigDict(extra="forbid", frozen=True)
 

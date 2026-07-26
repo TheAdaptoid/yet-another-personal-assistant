@@ -39,7 +39,6 @@ def mock_provider():
 def mock_provider_service(mock_provider):
     ps = MagicMock()
     ps.get_provider_by_model.return_value = mock_provider
-    ps.get_provider_by_model_full_id.return_value = mock_provider
     ps.get_model = AsyncMock(
         return_value=ModelData(
             id="test-default-model", provider_id="test", type=ModelType.LLM
