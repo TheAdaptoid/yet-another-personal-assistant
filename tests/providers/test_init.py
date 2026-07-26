@@ -28,10 +28,22 @@ class TestOpenAIIPInit:
         config = Config(openai_api_key="sk-test")
         with patch(
             "yapa.providers.openai_compat.AsyncOpenAI", return_value=mock_openai_client
-        ):
+        ) as mock_client:
             provider = OpenAIIP(config=config)
         assert provider.id == "openai"
         assert provider.name == "OpenAI"
+        mock_client.assert_called_once()
+        assert mock_client.call_args.kwargs["max_retries"] == 2
+
+    def test_custom_max_retries(self, mock_openai_client) -> None:
+        config = Config(openai_api_key="sk-test", provider_max_retries=5)
+        with patch(
+            "yapa.providers.openai_compat.AsyncOpenAI", return_value=mock_openai_client
+        ) as mock_client:
+            provider = OpenAIIP(config=config)
+        assert provider.id == "openai"
+        mock_client.assert_called_once()
+        assert mock_client.call_args.kwargs["max_retries"] == 5
 
 
 class TestLMStudioIPInit:
@@ -41,10 +53,12 @@ class TestLMStudioIPInit:
         config = Config(lmstudio_api_key="test-key")
         with patch(
             "yapa.providers.openai_compat.AsyncOpenAI", return_value=mock_openai_client
-        ):
+        ) as mock_client:
             provider = LMStudioIP(config=config)
         assert provider.id == "lmstudio"
         assert provider.name == "LM Studio"
+        mock_client.assert_called_once()
+        assert mock_client.call_args.kwargs["max_retries"] == 2
 
 
 class TestOllamaIPInit:
@@ -54,10 +68,12 @@ class TestOllamaIPInit:
         config = Config(ollama_api_key="test-key")
         with patch(
             "yapa.providers.openai_compat.AsyncOpenAI", return_value=mock_openai_client
-        ):
+        ) as mock_client:
             provider = OllamaIP(config=config)
         assert provider.id == "ollama"
         assert provider.name == "Ollama"
+        mock_client.assert_called_once()
+        assert mock_client.call_args.kwargs["max_retries"] == 2
 
 
 class TestOpenRouterProviderInit:
@@ -77,7 +93,9 @@ class TestOpenRouterProviderInit:
         config = Config(openrouter_api_key="sk-or-test")
         with patch(
             "yapa.providers.openai_compat.AsyncOpenAI", return_value=mock_openai_client
-        ):
+        ) as mock_client:
             provider = OpenRouterProvider(config=config)
         assert provider.id == "openrouter"
         assert provider.name == "OpenRouter"
+        mock_client.assert_called_once()
+        assert mock_client.call_args.kwargs["max_retries"] == 2

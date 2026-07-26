@@ -48,6 +48,7 @@ class OpenAICompatibleProvider(InferenceProvider, ABC):
         api_key: str,
         base_url: str | None,
         timeout: int = DEFAULT_PROVIDER_TIMEOUT,
+        max_retries: int = 2,
     ) -> None:
         """
         Initialize the OpenAI-compatible provider.
@@ -58,9 +59,15 @@ class OpenAICompatibleProvider(InferenceProvider, ABC):
             api_key: API key for the provider.
             base_url: Base URL for the API endpoint.
             timeout: Timeout in seconds for API calls.
+            max_retries: Maximum number of retries for API calls.
         """
         super().__init__(identifier, name)
-        self._client = AsyncOpenAI(api_key=api_key, base_url=base_url, timeout=timeout)
+        self._client = AsyncOpenAI(
+            api_key=api_key,
+            base_url=base_url,
+            timeout=timeout,
+            max_retries=max_retries,
+        )
 
     # ── Model fetching ──
 

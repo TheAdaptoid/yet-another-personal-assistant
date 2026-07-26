@@ -75,6 +75,7 @@ class OpenAIIP(OpenAICompatibleProvider):
             api_key=config.openai_api_key,
             base_url=config.openai_base_url,
             timeout=config.provider_timeout,
+            max_retries=config.provider_max_retries,
         )
 
     def _format_model(self, model_id: str) -> ModelData:

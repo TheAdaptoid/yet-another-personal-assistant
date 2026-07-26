@@ -23,4 +23,5 @@ class OpenRouterProvider(OpenAICompatibleProvider):
             api_key=config.openrouter_api_key,
             base_url=config.openrouter_base_url,
             timeout=config.provider_timeout,
+            max_retries=config.provider_max_retries,
         )
