@@ -75,3 +75,31 @@ class TestModelField:
         assert isinstance(data["model"], dict)
         assert data["model"]["id"] == "claude-3"
         assert data["model"]["provider_id"] == "anthropic"
+
+
+from yapa.models import InferenceParams
+
+
+class TestSessionNewFields:
+    def test_system_prompt_defaults_to_none(self):
+        session = Session()
+        assert session.system_prompt is None
+
+    def test_system_prompt_round_trip(self):
+        session = Session(system_prompt="You are helpful.")
+        data = session.model_dump(mode="json")
+        restored = Session(**data)
+        assert restored.system_prompt == "You are helpful."
+
+    def test_inference_params_defaults_to_none(self):
+        session = Session()
+        assert session.inference_params is None
+
+    def test_inference_params_round_trip(self):
+        params = InferenceParams(temperature=0.7, max_tokens=4096)
+        session = Session(inference_params=params)
+        data = session.model_dump(mode="json")
+        restored = Session(**data)
+        assert restored.inference_params is not None
+        assert restored.inference_params.temperature == 0.7
+        assert restored.inference_params.max_tokens == 4096
