@@ -27,9 +27,10 @@ def lmstudio_provider(mock_openai_client):
 @pytest.fixture
 def native_response():
     return {
-        "data": [
+        "models": [
             {
                 "key": "qwen/qwen3-4b@q4_k_m",
+                "type": "llm",
                 "loaded_instances": [
                     {"config": {"context_length": 32768, "gpu_offload_layers": 0}}
                 ],
@@ -37,19 +38,24 @@ def native_response():
                     "vision": False,
                     "trained_for_tool_use": True,
                 },
+                "max_context_length": 32768,
             },
             {
                 "key": "llama-3.2-8b",
+                "type": "llm",
                 "loaded_instances": [],
                 "capabilities": {
                     "vision": False,
                     "trained_for_tool_use": False,
                 },
+                "max_context_length": None,
             },
             {
                 "key": "text-embedding-3",
+                "type": "embedding",
                 "loaded_instances": [{"config": {"context_length": 8192}}],
                 "capabilities": {},
+                "max_context_length": 8192,
             },
         ]
     }

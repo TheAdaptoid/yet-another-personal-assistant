@@ -33,15 +33,18 @@ class LMStudioIP(OpenAICompatibleProvider):
 
     def _format_model_from_native(self, raw: dict) -> ModelData:
         model_id = raw.get("key", "")
-        model = self._format_model(model_id)
+        model_type = raw.get("type", "")
+        if model_type == "llm":
+            model_type_enum = ModelType.LLM
+        else:
+            model_type_enum = ModelType.OTHER
         caps = raw.get("capabilities", {})
-        instances = raw.get("loaded_instances", [])
-        config = instances[0].get("config", {}) if instances else {}
+        context_length = raw.get("max_context_length")
         return ModelData(
-            id=model.id,
-            provider_id=model.provider_id,
-            type=model.type,
-            context_length=config.get("context_length"),
+            id=model_id,
+            provider_id=self.id,
+            type=model_type_enum,
+            context_length=context_length,
             supports_tools=caps.get("trained_for_tool_use", False),
             supports_vision=caps.get("vision", False),
         )
@@ -57,7 +60,7 @@ class LMStudioIP(OpenAICompatibleProvider):
                 f"{self._native_base_url()}/models", headers=headers
             )
             resp.raise_for_status()
-            raw_models = resp.json().get("data", [])
+            raw_models = resp.json().get("models", [])
         formatted = [self._format_model_from_native(m) for m in raw_models]
         if model_type:
             return [m for m in formatted if m.type == model_type]
