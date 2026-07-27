@@ -111,14 +111,16 @@ def server(
     reload: bool = False,
 ):
     """Start the YAPA API server."""
-    console.print(Panel(
-        Text(LOGO, style=ORANGE),
-        subtitle=(
-            f"[dim]Listening on [white]http://{host}:{port}[/white]  "
-            f"Docs at [white]http://{host}:{port}/docs[/white]  "
-            f"Press Ctrl+C to stop[/dim]"
-        ),
-    ))
+    console.print(
+        Panel(
+            Text(LOGO, style=ORANGE),
+            subtitle=(
+                f"[dim]Listening on [white]http://{host}:{port}[/white]  "
+                f"Docs at [white]http://{host}:{port}/docs[/white]  "
+                f"Press Ctrl+C to stop[/dim]"
+            ),
+        )
+    )
     uvicorn.run(
         "yapa.api.app:create_app",
         host=host,

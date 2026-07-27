@@ -104,9 +104,7 @@ def test_patch_session_title(client, mock_session_service):
     data = response.json()
     assert data["title"] == "Renamed"
     assert data["id"] == str(session_id)
-    mock_session_service.rename.assert_called_once_with(
-        str(session_id), "Renamed"
-    )
+    mock_session_service.rename.assert_called_once_with(str(session_id), "Renamed")
 
 
 def test_patch_session_not_found(client, mock_session_service):

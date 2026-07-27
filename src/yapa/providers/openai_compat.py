@@ -199,9 +199,9 @@ class OpenAICompatibleProvider(InferenceProvider, ABC):
             stream=True,
         )
 
-        response_stream: AsyncStream[ChatCompletionChunk] = (
-            await self._client.chat.completions.create(**kwargs)
-        )
+        response_stream: AsyncStream[
+            ChatCompletionChunk
+        ] = await self._client.chat.completions.create(**kwargs)
 
         async for chunk in response_stream:
             delta = chunk.choices[0].delta

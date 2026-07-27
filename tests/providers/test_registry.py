@@ -1,5 +1,7 @@
 """Tests for ProviderRegistry."""
 
+from unittest.mock import patch
+
 import pytest
 
 from yapa.models import AssistantMessage, ModelData, ModelType, StreamDelta
@@ -68,6 +70,15 @@ class _FailingProv(InferenceProvider):
 class TestInit:
     """Tests for ProviderRegistry.__init__()."""
 
+    def test_loads_persisted_config_when_not_provided(self) -> None:
+        with patch("yapa.providers.registry.JsonConfigStore") as mock_store_cls:
+            mock_store = mock_store_cls.return_value
+            mock_store.load.return_value = None
+
+            ProviderRegistry([])
+
+            mock_store.load.assert_called_once()
+
     def test_all_succeed(self) -> None:
         registry = ProviderRegistry([_MockProv, _MockProvB])
         assert len(registry.available) == 2
@@ -79,6 +90,39 @@ class TestInit:
         assert registry.available[0].id == "mock"
         assert len(registry.failures) == 1
         assert "Missing API key" in registry.failures["_FailingProv"]
+
+    def test_captures_non_value_error_init_failures(self) -> None:
+        class _RuntimeFailingProv(InferenceProvider):
+            def __init__(self, config=None):
+                raise RuntimeError("boom")
+
+            async def _list_models_impl(self, model_type=None):
+                raise RuntimeError("should not be called")
+
+            async def _get_model_impl(self, model_id):
+                raise RuntimeError("should not be called")
+
+            async def _stream_chat_impl(
+                self,
+                model_id,
+                messages,
+                tools=None,
+                params=None,
+            ):
+                raise RuntimeError("should not be called")
+
+            async def _static_chat_impl(
+                self,
+                model_id,
+                messages,
+                tools=None,
+                params=None,
+            ):
+                raise RuntimeError("should not be called")
+
+        registry = ProviderRegistry([_RuntimeFailingProv])
+        assert len(registry.available) == 0
+        assert registry.failures["_RuntimeFailingProv"] == "boom"
 
     def test_all_fail(self) -> None:
         registry = ProviderRegistry([_FailingProv])

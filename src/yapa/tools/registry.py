@@ -1,4 +1,3 @@
-
 """Registry for managing tool instances."""
 
 from yapa.logging import get_logger
