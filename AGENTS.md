@@ -1,108 +1,114 @@
 # YAPA — Developer Guide
 
+## Commands
+
+```bash
+uv sync                                         # install dev deps
+uvx yapa --help                                 # run without installing
+uv run python -m yapa                           # run from checkout (wires to CLI)
+uv run pytest tests/ -v                         # full suite (≥80% coverage)
+uv run pytest tests/api/ -v                     # API tests only
+uv run pytest tests/cli/ -v                     # CLI tests only
+uv run pytest tests/providers/ -v               # provider tests only
+uv run pytest tests/models/ -v                  # model tests only
+uv run pytest tests/storage/ -v                 # storage tests only
+uv run pytest tests/test_services/ -v           # services tests only
+uv run pytest tests/ -k "test_name"             # single test
+uv run ruff check src/ tests/                   # lint (F, E, I, C90, D)
+uv run ruff format src/ tests/                  # auto-format
+uv run ty check src/                            # type check (excludes tests/)
+```
+
+Gate: `uv run ruff check src/ tests/ && uv run ty check src/ && uv run pytest tests/ -v`
+
 ## Architecture
 
 ```
 src/yapa/
-├── __main__.py      # Entry point (currently bare — no CLI wired up)
-├── logging.py       # File ± console logging to ~/.yapa/logs/{date}/{name}.log
-├── models/          # Pydantic v2 models (Session, Message, Event, InferenceParams, etc.)
-├── providers/       # InferenceProvider ABC + implementations (OpenAI, OpenRouter, LM Studio, Ollama)
-├── services/        # UI-agnostic business logic with protocol-based DI
-│   ├── config.py    # Config, ProviderConfig, ConfigStore protocol, JsonConfigStore
-│   ├── store.py     # SessionStore protocol, JsonSessionStore (wraps GenericStore)
-│   ├── session.py   # SessionService — session CRUD + message appending
-│   ├── models.py    # ModelService — wraps ProviderRegistry for model discovery
-│   ├── chat.py      # ChatService — stateless, one stream() call per invocation
-│   └── exceptions.py# ChatError
-├── storage/         # GenericStore — JSON file persistence
-└── tools/           # Tool abstractions (pre-existing, not yet integrated into ChatService)
+  __main__.py   # Entry point → delegates to yapa.cli.app:cli()
+  logging.py    # File + console logging to ~/.yapa/logs/{YYYY-MM-DD}/{name}.log
+  api/          # FastAPI app (factory pattern), REST routes, WebSocket chat
+  cli/          # Typer commands: server, config, models, sessions
+  models/       # Pydantic v2: Session, Message (discriminated union), Event, InferenceParams
+  providers/    # InferenceProvider ABC → OpenAICompatibleProvider ABC
+  services/     # Business logic with protocol-based DI (ConfigStore, SessionStore)
+  storage/      # GenericStore — JSON file persistence, one file per entity
+  tools/        # Tool ABC + ToolRegistry (not integrated into ChatService yet)
 ```
 
-**Key design decisions:**
-- Services depend on protocol abstractions (`ConfigStore`, `SessionStore`), not concrete stores.
-- `ChatService` is fully stateless — no `start()`, no `switch_session()`, no `close()`. Each `stream()` call is independent.
-- `Session` stores `model`, `system_prompt`, and `inference_params` — not on the service call.
-- Storage is JSON file-based via `GenericStore` (not SQLite). Sessions saved per-file in `~/.yapa/storage/`.
-- Config is NOT a singleton — injected via constructor. `JsonConfigStore` reads `~/.yapa/config.json` + env var overrides.
-- Providers define their own `DEFAULT_BASE_URL` when `ProviderConfig.base_url` is `None`.
+Key facts:
+- `services/__init__.py` uses lazy `__getattr__` imports to avoid circular deps
+- `ChatService` is stateless. Each `stream()` call is independent. Do not reuse.
+- `Session` stores `model: ModelData`, `system_prompt`, `inference_params`, and `messages`
+- Config is NOT a singleton. Inject via constructor. `JsonConfigStore` caches in memory.
+- Provider API keys go in `~/.yapa/config.json` only. Set with `yapa config set provider_configs.{id}.api_key <key>`.
 
-## Key Commands
+## Providers
 
-```bash
-uv sync                                       # install dev dependencies
-uv run python -m yapa                         # run (entry point is currently empty — no CLI)
-uv run pytest tests/ -v                       # full test suite (enforces ≥80% coverage)
-uv run pytest tests/test_services/ -v          # services tests only
-uv run pytest tests/providers/ -v              # provider tests only
-uv run pytest tests/models/ -v                # model tests only
-uv run pytest tests/storage/ -v               # storage tests only
-uv run pytest tests/ -k "test_name"           # single test filter
-uv run ruff check src/ tests/                 # lint (select: F, E, I, C90, D)
-uv run ty check src/                          # type check
+```
+InferenceProvider (ABC, template method pattern)
+  └── OpenAICompatibleProvider (ABC, shared OpenAI client logic)
+       ├── OpenAIIP             (hardcoded _MODEL_METADATA dict)
+       ├── OpenRouterProvider   (custom httpx model listing for richer metadata)
+       ├── LMStudioIP           (custom httpx to /api/v1/models for native data)
+       └── OllamaIP             (no overrides, pure OpenAI-compatible)
 ```
 
-Recommended local gate:
-`uv run ruff check src/ tests/ && uv run ty check src/ && uv run pytest tests/ -v`
+- All registered in `providers/__init__.py:DEFAULT_PROVIDER_CLASSES` — add new providers there
+- `ProviderRegistry` instantiates all classes, tracks failures per-provider without failing the whole registry
+- Provider constructors accept `config: Config` and read `config.provider_configs[provider_id]`
+- Default base URLs are in each provider file (e.g. `OpenRouterProvider.DEFAULT_BASE_URL`)
+- Public methods wrap private `_impl` methods with logging + error conversion to `ModelsFetchError`/`ModelInvocationError`/`ModelTypeError`
 
 ## Config
 
-Config file: `~/.yapa/config.json`  
-Storage dir: `~/.yapa/storage/`  
-Logs dir: `~/.yapa/logs/{YYYY-MM-DD}/`
+`~/.yapa/config.json`. Env var overrides (only these, no provider keys):
 
-Env var overrides (defined in `services/config.py:ENV_OVERRIDES`):
-`YAPA_LOG_LEVEL`, `YAPA_STORAGE_DIR`, `YAPA_PROVIDER_TIMEOUT`, `YAPA_PROVIDER_MAX_RETRIES`
-
-Provider configs stored under `provider_configs` dict keyed by provider ID (e.g. `openai`, `openrouter`).
-Provider-specific API keys read from env: `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, etc.
-
-## Testing
-
-- `pytest.ini`: `asyncio_mode = auto`, `--cov=src --cov-fail-under=80`.
-- Services tests (`tests/test_services/conftest.py`): autouse patch `yapa.services.models.get_logger`.
-- Provider tests (`tests/providers/conftest.py`): autouse patch `yapa.providers.base.get_logger`, provides `sample_config` fixture with `ProviderConfig` for all 4 providers, `mock_openai_client`, `sample_llm_model`, `sample_other_model`, `sample_messages`.
-- All provider tests use lightweight mocks (`AsyncMock`, `MagicMock`).
-- Storage tests rely on `GenericStore` reading/writing JSON files (use `tmp_path`).
-
-## Provider Error Contract
-
-Defined in `src/yapa/providers/exceptions.py`:
-
-| Exception | Raised by |
+| Env var | Config key |
 |---|---|
-| `ModelsFetchError` | `InferenceProvider.list_models()` / `get_model()` on provider failures |
-| `ModelInvocationError` | `InferenceProvider.stream_chat()` / `static_chat()` on streaming failures |
-| `ModelTypeError` | `_pre_invoke_check()` if model type is not LLM |
+| `YAPA_LOG_LEVEL` | `log_level` |
+| `YAPA_STORAGE_DIR` | `storage_dir` |
+| `YAPA_PROVIDER_TIMEOUT` | `provider_timeout` |
+| `YAPA_PROVIDER_MAX_RETRIES` | `provider_max_retries` |
+| `YAPA_API_PREFIX` | `api_prefix` |
 
-`ModelService.list_models()` catches `ModelsFetchError` per provider and continues.
+Provider API keys must be set via CLI or written directly into the JSON
+file. They are NOT read from environment variables.
 
 ## Events (Phase 1 Contract)
 
-`AgentStartEvent → (TextEvent | ReasoningEvent)* → AgentDoneEvent | AgentErrorEvent`
+```
+AgentStartEvent → (TextEvent | ReasoningEvent)* → AgentDoneEvent | AgentErrorEvent
+```
 
-Event types in `yapa.models.event`:
-- `AgentStartEvent` — emitted at start, includes `model_id`
-- `TextEvent` — streaming content chunk
-- `ReasoningEvent` — streaming reasoning/thinking chunk
-- `AgentDoneEvent` — final event with `content`, `finish_reason`, optional `usage`
-- `AgentErrorEvent` — emitted on unrecoverable error, includes `message`
+All event types in `yapa.models.event`. Sent as JSON over WebSocket and
+internal `AsyncGenerator[Event]` in `ChatService.stream()`.
 
-## Conventions
+## API module
 
-- **Package root**: `src/yapa/`.
-- **Import style**: absolute from package root — `from yapa.services import ChatService, SessionService, Config`.
-- **Python**: 3.13+.
-- **Line length**: 88 (ruff + ty enforce).
-- **Docstrings**: required (ruff D rules, ignored in tests).
-- **No generated artifacts**: do not commit build/codegen output.
-- **No weakening config**: do not bypass lint/type rules in `ruff.toml` or `ty.toml`.
-- **Tests required**: new config/model behavior must include tests.
+- `api/app.py:create_app(config=None)` → FastAPI application factory
+- Routes registered under `config.api_prefix` (default `/api/v1`)
+- Exception mapping: `ValueError` → 404, `ProviderNotAvailableError` → 404, `ChatError` → 500
+- Services injected via `app.state` (no `Depends` for the lifespan)
+- WebSocket at `/chat/{session_id}` — accepts JSON `{"prompt": ..., "model": ...}`, streams events
+- Tests: `TestClient` with mocked services in `app.state` (`tests/api/conftest.py`)
 
-## Don't
+## CLI module
 
-- Don't circumvent `ChatService` to call providers directly for chat operations — always go through the service layer.
-- Don't add `cli/` module or Typer routing without also wiring up `__main__.py`.
-- Don't add SQLite/sqlmodel dependencies — Phase 2+, not current scope.
-- Don't add config/model behavior without tests when it changes runtime behavior.
-- Don't bypass lint/type rules by weakening `ruff.toml` or `ty.toml`.
+- `cli/app.py` — single `typer.Typer()` app with sub-typers for `config` and `sessions`
+- Commands: `server`, `config show`, `config set`, `models`, `sessions list|get|delete|rename`
+- Tests: `CliRunner` with patched `yapa.cli.app.*` module-level imports (`tests/cli/conftest.py`)
+
+## Testing quirks
+
+- `tests/providers/conftest.py` — autouse patch `yapa.providers.base.get_logger`
+- `tests/test_services/conftest.py` — autouse patch `yapa.services.models.get_logger`
+- All provider tests use lightweight mocks (`AsyncMock`, `MagicMock`, `SimpleNamespace`)
+- Storage tests use `tmp_path` for isolated filesystem
+- ruff ignores D100-D104, D107 in test files; docstrings required elsewhere
+- ty skips `tests/` entirely
+
+## Constraint
+
+Do not add SQLite/sqlmodel dependencies. This is a Phase 2+ feature, not
+current scope.
