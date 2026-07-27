@@ -21,10 +21,10 @@ Configure at least one provider API key (or use a `.env` file):
 export OPENROUTER_API_KEY=your_key_here
 ```
 
-Run the CLI to verify your setup:
+Run the test suite to verify your setup:
 
 ```bash
-uv run python -m yapa --help
+uv run pytest tests/ -v
 ```
 
 ## Code quality
@@ -57,9 +57,11 @@ uv run ty check src/
 ### Testing
 
 ```bash
-uv run pytest tests/ -v           # full suite (≥80% coverage required)
-uv run pytest tests/cli/ -v       # CLI tests only
-uv run pytest tests/services/ -v  # service tests only
+uv run pytest tests/ -v                # full suite (≥80% coverage required)
+uv run pytest tests/test_services/ -v  # service tests only
+uv run pytest tests/providers/ -v      # provider tests only
+uv run pytest tests/models/ -v         # model tests only
+uv run pytest tests/storage/ -v        # storage tests only
 ```
 
 Coverage is enforced at 80% (`--cov-fail-under=80` in `pytest.ini`).
@@ -79,21 +81,22 @@ See [AGENTS.md](AGENTS.md) for the full architecture, conventions, and reference
 
 ```
 src/yapa/
-  cli/         # Typer commands (app, chat, models, sessions)
-  database/    # SQLite models, engine, repositories (sqlmodel)
-  models/      # Message, inference, and session data models
-  providers/   # Provider abstraction + implementations
-  services/    # UI-agnostic business logic
-  config.py    # Config loading and persistence
-  logging.py   # File and console logging helpers
+  __main__.py  # Entry point (currently bare — no CLI wired up)
+  logging.py   # File ± console logging
+  models/      # Pydantic v2 data models (Session, Message, Event, InferenceParams)
+  providers/   # Provider ABC + implementations (OpenAI, OpenRouter, LM Studio, Ollama)
+  services/    # UI-agnostic business logic with protocol-based DI
+  storage/     # GenericStore — JSON file persistence
+  tools/       # Tool abstractions (pre-existing, not yet integrated)
 ```
 
 ## Adding a new provider
 
-1. Create a protocol class in `src/yapa/providers/protocols/` implementing `ModelFetchProtocol` and/or `InferenceProtocol`.
-2. Create a concrete provider class in `src/yapa/providers/concretes/` that composes the protocol(s).
-3. Register the provider in `src/yapa/providers/__init__.py`'s `DEFAULT_PROVIDERS` list.
-4. Add tests in `tests/providers/concretes/` and `tests/providers/protocols/`.
+1. Create a provider directory under `src/yapa/providers/` with a `provider.py` implementing the `InferenceProvider` ABC.
+2. Add the provider class to `src/yapa/providers/__init__.py`'s `DEFAULT_PROVIDER_CLASSES` list.
+3. Add `ProviderConfig` entries in `tests/providers/conftest.py`'s `sample_config` fixture.
+4. Add tests covering init, model listing, and streaming in `tests/providers/`.
+5. Use `AsyncMock`/`MagicMock` for the OpenAI client — see existing provider tests for patterns.
 
 ## Adding a new feature
 
@@ -101,6 +104,8 @@ src/yapa/
 2. Add tests alongside the code. New runtime behavior requires tests.
 3. Ensure docstrings are present on all public APIs.
 4. Run the full quality gate before submitting.
+
+See [AGENTS.md](AGENTS.md) for architecture details, design decisions, and conventions.
 
 ## Submitting changes
 
