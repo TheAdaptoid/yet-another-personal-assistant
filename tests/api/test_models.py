@@ -11,7 +11,8 @@ from yapa.models import ModelData, ModelType
 def sample_models():
     return [
         ModelData(id="gpt-4o", provider_id="openai", type=ModelType.LLM),
-        ModelData(id="text-embedding-ada-002", provider_id="openai", type=ModelType.OTHER),
+        ModelData(id="text-embedding-ada-002", provider_id="openai",
+                  type=ModelType.OTHER),
         ModelData(id="llama-3", provider_id="ollama", type=ModelType.LLM),
         ModelData(id="text-embedding-v3", provider_id="openai", type=ModelType.OTHER),
         ModelData(id="mistral-7b", provider_id="mistral", type=ModelType.LLM),
@@ -51,7 +52,8 @@ def test_no_models_found(client):
     assert response.json() == []
 
 def test_combined_provider_and_type_filtering(client, sample_models):
-    expected = [m for m in sample_models if m.provider_id == "openai" and m.type == ModelType.LLM]
+    expected = [m for m in sample_models
+                if m.provider_id == "openai" and m.type == ModelType.LLM]
     client.app.state.model_service.list_models = AsyncMock(return_value=expected)
     response = client.get("/api/v1/models?provider_id=openai&model_type=llm")
     assert response.status_code == 200

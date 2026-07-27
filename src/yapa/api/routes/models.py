@@ -22,7 +22,10 @@ async def list_models(
     except ValueError:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid model type: '{model_type}'. Must be one of {[e.value for e in ModelType]}",
+            detail=(
+                f"Invalid model type: '{model_type}'. "
+                f"Must be one of {[e.value for e in ModelType]}"
+            ),
         )
     return await model_service.list_models(
         provider_id=provider_id, model_type=model_type_enum
