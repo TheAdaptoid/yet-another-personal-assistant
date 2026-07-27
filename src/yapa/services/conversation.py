@@ -17,7 +17,7 @@ from yapa.models import (
 from yapa.providers.exceptions import ModelInvocationError
 from yapa.storage import GenericStore
 
-from .exceptions import ConversationError
+from .exceptions import ChatError
 from .provider import ProviderService
 
 TITLE_SYSTEM_PROMPT = (
@@ -94,7 +94,7 @@ class ConversationService:
     def _save_message(self, message: Message) -> None:
         """Persist a message to the current session."""
         if not self._session_id:
-            raise ConversationError("No active session to save message to")
+            raise ChatError("No active session to save message to")
         self._messages.append(message)
         session = self._store.load(str(self._session_id))
         session.messages.append(message)
@@ -215,7 +215,7 @@ class ConversationService:
 
         Both the user and assistant messages are persisted atomically only
         after the model has responded successfully. If the model returns an
-        empty response, both messages are discarded and ConversationError is
+        empty response, both messages are discarded and ChatError is
         raised.
 
         Args:
@@ -227,13 +227,13 @@ class ConversationService:
             StreamDelta for each chunk of the assistant response.
 
         Raises:
-            ConversationError: If the model invocation fails or returns an
+            ChatError: If the model invocation fails or returns an
                 empty response.
         """
         if model:
             self._model = model
         if (not self._session_id) or (not self._model):
-            raise ConversationError("Call start() before sending messages")
+            raise ChatError("Call start() before sending messages")
 
         user_msg = UserMessage(content=prompt)
         provider = self._ps.get_provider_by_model(self._model)
@@ -251,10 +251,10 @@ class ConversationService:
                     reasoning_buffer += delta.reasoning_content
                 yield delta
         except ModelInvocationError as e:
-            raise ConversationError("Model invocation failed") from e
+            raise ChatError("Model invocation failed") from e
 
         if not content_buffer:
-            raise ConversationError("Model returned empty response")
+            raise ChatError("Model returned empty response")
 
         assistant_msg = AssistantMessage(
             content=content_buffer,
