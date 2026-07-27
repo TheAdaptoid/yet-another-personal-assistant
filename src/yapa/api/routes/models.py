@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from yapa.models import ModelData
+from yapa.models import ModelData, ModelType
 from yapa.services import ModelService
 
 from ..dependencies import get_model_service
@@ -13,10 +13,20 @@ router = APIRouter(tags=["models"])
 @router.get("/models", response_model=list[ModelData])
 async def list_models(
     provider_id: str | None = None,
+    model_type: str | None = None,
     model_service: ModelService = Depends(get_model_service),
 ):
-    """List all models, optionally filtered by provider."""
-    return await model_service.list_models(provider_id=provider_id)
+    """List all models, optionally filtered by provider and model type."""
+    try:
+        model_type_enum = ModelType(model_type) if model_type else None
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid model type: '{model_type}'. Must be one of {[e.value for e in ModelType]}",
+        )
+    return await model_service.list_models(
+        provider_id=provider_id, model_type=model_type_enum
+    )
 
 
 @router.get("/models/{full_id:path}", response_model=ModelData)
