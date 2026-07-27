@@ -1,11 +1,11 @@
-"""Agent event types for the agent-service event system."""
+"""Phase 1 event types for the agent-service event system."""
 
-import time
+from datetime import datetime, timezone
 from enum import Enum
 
 from pydantic import BaseModel, Field
 
-from .tool import ToolApprovalRequest, ToolApprovalResponse
+from yapa.models.inference import TokenUsage
 
 
 class EventType(str, Enum):
@@ -13,15 +13,9 @@ class EventType(str, Enum):
 
     TEXT_CHUNK = "text_chunk"
     REASONING_CHUNK = "reasoning_chunk"
-
-    TOOL_CALL = "tool_call"
-    TOOL_RESULT = "tool_result"
-    TOOL_APPROVAL_REQUEST = "tool_approval_request"
-    TOOL_APPROVAL_RESPONSE = "tool_approval_response"
-
     AGENT_START = "agent_start"
-    AGENT_ERROR = "agent_error"
     AGENT_DONE = "agent_done"
+    AGENT_ERROR = "agent_error"
 
 
 class EventSource(str, Enum):
@@ -33,18 +27,11 @@ class EventSource(str, Enum):
 
 
 class Event(BaseModel):
-    """
-    Base class for all agent events.
-
-    Attributes:
-        type: Discriminator for the concrete event kind.
-        source: Originator of the event.
-        timestamp: Epoch seconds when the event was created.
-    """
+    """Base class for all agent events."""
 
     type: EventType
     source: EventSource = EventSource.SYSTEM
-    timestamp: float = Field(default_factory=time.time)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class TextEvent(Event):
@@ -64,26 +51,21 @@ class ReasoningEvent(Event):
 
 
 class AgentStartEvent(Event):
-    """
-    Emitted when the agent begins processing a message.
-
-    Sent once per ``process_message`` invocation, before the first model
-    call.
-    """
+    """Emitted when the agent begins processing a message."""
 
     type: EventType = EventType.AGENT_START
     source: EventSource = EventSource.AGENT
+    model_id: str
 
 
 class AgentDoneEvent(Event):
-    """
-    Emitted after all messages have been persisted.
-
-    Marks clean termination of the agent loop for this turn.
-    """
+    """Emitted after the model response is complete."""
 
     type: EventType = EventType.AGENT_DONE
     source: EventSource = EventSource.AGENT
+    content: str
+    finish_reason: str | None = None
+    usage: TokenUsage | None = None
 
 
 class AgentErrorEvent(Event):
@@ -92,41 +74,3 @@ class AgentErrorEvent(Event):
     type: EventType = EventType.AGENT_ERROR
     source: EventSource = EventSource.AGENT
     message: str
-
-
-class ToolResultEvent(Event):
-    """Notification that a single tool call has completed."""
-
-    type: EventType = EventType.TOOL_RESULT
-    source: EventSource = EventSource.SYSTEM
-    call_id: str
-    tool_name: str
-    result: str
-    execution_time: float
-    success: bool
-
-
-class ToolApprovalRequestEvent(Event):
-    """
-    Request for the user to approve one or more pending tool calls.
-
-    One ``ToolApprovalRequestEvent`` carries the full batch of tool calls
-    requested by the model in a single turn. The UI must present all of
-    them and collect a response for each before the agent can continue.
-    """
-
-    type: EventType = EventType.TOOL_APPROVAL_REQUEST
-    source: EventSource = EventSource.AGENT
-    requests: list[ToolApprovalRequest]
-
-
-class ToolApprovalResponseEvent(Event):
-    """
-    User decision(s) on a previously issued approval request.
-
-    Contains one ``ToolApprovalResponse`` per tool call in the batch.
-    """
-
-    type: EventType = EventType.TOOL_APPROVAL_RESPONSE
-    source: EventSource = EventSource.USER
-    responses: list[ToolApprovalResponse]
