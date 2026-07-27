@@ -14,12 +14,14 @@ DEFAULT_CONFIG_PATH = DEFAULT_DATA_DIR / "config.json"
 DEFAULT_STORAGE_DIR = DEFAULT_DATA_DIR / "storage"
 DEFAULT_LOG_LEVEL = "INFO"
 DEFAULT_PROVIDER_TIMEOUT = 120
+DEFAULT_API_PREFIX = "/api/v1"
 
 ENV_OVERRIDES: dict[str, str] = {
     "log_level": "YAPA_LOG_LEVEL",
     "storage_dir": "YAPA_STORAGE_DIR",
     "provider_timeout": "YAPA_PROVIDER_TIMEOUT",
     "provider_max_retries": "YAPA_PROVIDER_MAX_RETRIES",
+    "api_prefix": "YAPA_API_PREFIX",
 }
 
 
@@ -35,6 +37,7 @@ class Config(BaseModel):
 
     provider_configs: dict[str, ProviderConfig] = Field(default_factory=dict)
     storage_dir: Path = DEFAULT_STORAGE_DIR
+    api_prefix: str = DEFAULT_API_PREFIX
     log_level: str = DEFAULT_LOG_LEVEL
     provider_timeout: int = DEFAULT_PROVIDER_TIMEOUT
     provider_max_retries: int = 2

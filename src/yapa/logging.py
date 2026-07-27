@@ -2,8 +2,7 @@
 
 import logging
 from datetime import datetime, timezone
-
-from yapa.services.config import DEFAULT_DATA_DIR
+from pathlib import Path
 
 _loggers: dict[str, logging.Logger] = {}
 
@@ -39,7 +38,7 @@ def get_logger(
     logger.setLevel(log_level)
     logger.handlers.clear()
 
-    log_dir = DEFAULT_DATA_DIR / "logs" / datetime.now(timezone.utc).strftime(
+    log_dir = Path.home() / ".yapa" / "logs" / datetime.now(timezone.utc).strftime(
         "%Y-%m-%d"
     )
     log_dir.mkdir(parents=True, exist_ok=True)
