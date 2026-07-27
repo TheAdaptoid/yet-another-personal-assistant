@@ -2,8 +2,8 @@
 
 import httpx
 
-from yapa.config import UNSET, Config
 from yapa.models import ModelData, ModelType
+from yapa.services.config import Config, ProviderConfig
 
 from ..openai_compat import OpenAICompatibleProvider
 
@@ -11,20 +11,17 @@ from ..openai_compat import OpenAICompatibleProvider
 class OpenRouterProvider(OpenAICompatibleProvider):
     """Inference provider for OpenRouter."""
 
-    def __init__(self, config: Config):
-        """
-        Initialize the OpenRouter provider.
+    DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
 
-        Args:
-            config: Application config containing the OpenRouter API key.
-        """
-        if config.openrouter_api_key in (None, UNSET):
+    def __init__(self, config: Config):
+        pc = config.provider_configs.get("openrouter", ProviderConfig())
+        if pc.api_key is None:
             raise ValueError("OpenRouter API key is not set.")
         super().__init__(
             identifier="openrouter",
             name="OpenRouter",
-            api_key=config.openrouter_api_key,
-            base_url=config.openrouter_base_url,
+            api_key=pc.api_key,
+            base_url=pc.base_url or self.DEFAULT_BASE_URL,
             timeout=config.provider_timeout,
             max_retries=config.provider_max_retries,
         )

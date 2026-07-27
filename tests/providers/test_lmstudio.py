@@ -5,9 +5,9 @@ from unittest.mock import AsyncMock, patch
 import httpx
 import pytest
 
-from yapa.config import Config
 from yapa.models import ModelType
 from yapa.providers.lmstudio import LMStudioIP
+from yapa.services.config import Config, ProviderConfig
 
 
 @pytest.fixture
@@ -15,7 +15,11 @@ def lmstudio_provider(mock_openai_client):
     with patch(
         "yapa.providers.openai_compat.AsyncOpenAI", return_value=mock_openai_client
     ):
-        provider = LMStudioIP(config=Config(lmstudio_api_key="test-key"))
+        provider = LMStudioIP(
+            config=Config(
+                provider_configs={"lmstudio": ProviderConfig(api_key="test-key")}
+            )
+        )
     provider._client = mock_openai_client
     return provider
 

@@ -5,9 +5,9 @@ from unittest.mock import AsyncMock, patch
 import httpx
 import pytest
 
-from yapa.config import Config
 from yapa.models import ModelType
 from yapa.providers.openrouter import OpenRouterProvider
+from yapa.services.config import Config, ProviderConfig
 
 
 @pytest.fixture
@@ -17,7 +17,11 @@ def openrouter_provider(mock_openai_client):
         return_value=mock_openai_client,
     ):
         provider = OpenRouterProvider(
-            config=Config(openrouter_api_key="sk-or-test")
+            config=Config(
+                provider_configs={
+                    "openrouter": ProviderConfig(api_key="sk-or-test")
+                }
+            )
         )
     provider._client = mock_openai_client
     return provider

@@ -2,8 +2,8 @@
 
 import httpx
 
-from yapa.config import Config
 from yapa.models import ModelData, ModelType
+from yapa.services.config import Config, ProviderConfig
 
 from ..openai_compat import OpenAICompatibleProvider
 
@@ -11,18 +11,15 @@ from ..openai_compat import OpenAICompatibleProvider
 class LMStudioIP(OpenAICompatibleProvider):
     """Inference provider for LM Studio."""
 
-    def __init__(self, config: Config):
-        """
-        Initialize the LM Studio provider.
+    DEFAULT_BASE_URL = "http://localhost:1234/v1"
 
-        Args:
-            config: Application config containing LM Studio credentials.
-        """
+    def __init__(self, config: Config):
+        pc = config.provider_configs.get("lmstudio", ProviderConfig())
         super().__init__(
             identifier="lmstudio",
             name="LM Studio",
-            api_key=config.lmstudio_api_key,
-            base_url=config.lmstudio_base_url,
+            api_key=pc.api_key or "",
+            base_url=pc.base_url or self.DEFAULT_BASE_URL,
             timeout=config.provider_timeout,
             max_retries=config.provider_max_retries,
         )

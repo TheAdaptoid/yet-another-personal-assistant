@@ -444,13 +444,17 @@ class TestOpenAIModelMetadata:
 
     @pytest.fixture
     def openai_provider(self, mock_openai_client):
-        from yapa.config import Config
+        from yapa.services.config import Config, ProviderConfig
 
         with patch(
             "yapa.providers.openai_compat.AsyncOpenAI",
             return_value=mock_openai_client,
         ):
-            provider = OpenAIIP(config=Config(openai_api_key="sk-test"))
+            provider = OpenAIIP(
+                config=Config(
+                    provider_configs={"openai": ProviderConfig(api_key="sk-test")}
+                )
+            )
         provider._client = mock_openai_client
         return provider
 

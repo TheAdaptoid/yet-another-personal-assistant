@@ -2,8 +2,8 @@
 
 from typing import cast
 
-from yapa.config import UNSET, Config
 from yapa.models import ModelData
+from yapa.services.config import Config, ProviderConfig
 
 from ..openai_compat import OpenAICompatibleProvider
 
@@ -62,20 +62,17 @@ _MODEL_METADATA: dict[str, dict[str, object]] = {
 class OpenAIIP(OpenAICompatibleProvider):
     """Inference provider for OpenAI."""
 
-    def __init__(self, config: Config):
-        """
-        Initialize the OpenAI provider.
+    DEFAULT_BASE_URL = "https://api.openai.com/v1"
 
-        Args:
-            config: Application config containing the OpenAI API key and base URL.
-        """
-        if config.openai_api_key in (None, UNSET):
+    def __init__(self, config: Config):
+        pc = config.provider_configs.get("openai", ProviderConfig())
+        if pc.api_key is None:
             raise ValueError("OpenAI API key is not set.")
         super().__init__(
             identifier="openai",
             name="OpenAI",
-            api_key=config.openai_api_key,
-            base_url=config.openai_base_url,
+            api_key=pc.api_key,
+            base_url=pc.base_url or self.DEFAULT_BASE_URL,
             timeout=config.provider_timeout,
             max_retries=config.provider_max_retries,
         )

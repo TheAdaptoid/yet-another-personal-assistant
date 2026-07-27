@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from yapa.config import Config
+from yapa.services.config import Config, ProviderConfig
 from yapa.models import ModelData, ModelType
 from yapa.models.message import UserMessage
 
@@ -21,10 +21,12 @@ def mock_logger() -> Generator[MagicMock, None, None]:
 @pytest.fixture
 def sample_config() -> Config:
     return Config(
-        openai_api_key="sk-test",
-        lmstudio_api_key="test-key",
-        ollama_api_key="test-key",
-        openrouter_api_key="sk-or-test",
+        provider_configs={
+            "openai": ProviderConfig(api_key="sk-test"),
+            "lmstudio": ProviderConfig(api_key="test-key"),
+            "ollama": ProviderConfig(api_key="test-key"),
+            "openrouter": ProviderConfig(api_key="sk-or-test"),
+        },
     )
 
 

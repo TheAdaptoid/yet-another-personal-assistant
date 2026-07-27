@@ -1,6 +1,6 @@
 """Ollama inference provider implementation."""
 
-from yapa.config import Config
+from yapa.services.config import Config, ProviderConfig
 
 from ..openai_compat import OpenAICompatibleProvider
 
@@ -8,18 +8,15 @@ from ..openai_compat import OpenAICompatibleProvider
 class OllamaIP(OpenAICompatibleProvider):
     """Inference provider for Ollama."""
 
-    def __init__(self, config: Config):
-        """
-        Initialize the Ollama provider.
+    DEFAULT_BASE_URL = "http://localhost:11434/v1"
 
-        Args:
-            config: Application config containing Ollama credentials.
-        """
+    def __init__(self, config: Config):
+        pc = config.provider_configs.get("ollama", ProviderConfig())
         super().__init__(
             identifier="ollama",
             name="Ollama",
-            api_key=config.ollama_api_key,
-            base_url=config.ollama_base_url,
+            api_key=pc.api_key or "",
+            base_url=pc.base_url or self.DEFAULT_BASE_URL,
             timeout=config.provider_timeout,
             max_retries=config.provider_max_retries,
         )

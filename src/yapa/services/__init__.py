@@ -1,13 +1,17 @@
 """Service layer — UI-agnostic business logic."""
 
-from .conversation import ConversationService
+from .config import Config, ConfigStore, JsonConfigStore, ProviderConfig
 from .exceptions import ChatError
-from .provider import ProviderService
 from .session import SessionService
+from .store import JsonSessionStore, SessionStore
 
 __all__ = [
     "ChatError",
-    "ConversationService",
-    "ProviderService",
+    "Config",
+    "ConfigStore",
+    "JsonConfigStore",
+    "JsonSessionStore",
+    "ProviderConfig",
     "SessionService",
+    "SessionStore",
 ]
