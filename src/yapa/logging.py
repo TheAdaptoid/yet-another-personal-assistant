@@ -3,7 +3,7 @@
 import logging
 from datetime import datetime, timezone
 
-from yapa.config import get_config
+from yapa.services.config import DEFAULT_DATA_DIR
 
 _loggers: dict[str, logging.Logger] = {}
 
@@ -33,14 +33,13 @@ def get_logger(
     if name in _loggers:
         return _loggers[name]
 
-    config = get_config()
-    log_level = level or config.log_level
+    log_level = level or "INFO"
 
     logger = logging.getLogger(name)
     logger.setLevel(log_level)
     logger.handlers.clear()
 
-    log_dir = config.data_dir / "logs" / datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    log_dir = DEFAULT_DATA_DIR / "logs" / datetime.now(timezone.utc).strftime("%Y-%m-%d")
     log_dir.mkdir(parents=True, exist_ok=True)
 
     log_file = log_dir / f"{name}.log"
