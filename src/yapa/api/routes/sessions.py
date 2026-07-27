@@ -52,7 +52,7 @@ async def get_session(
 
 
 @router.patch("/sessions/{session_id}", response_model=Session)
-async def patch_session(
+async def patch_session_title(
     session_id: UUID,
     body: dict,
     session_service: SessionService = Depends(get_session_service),
