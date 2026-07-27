@@ -1,0 +1,866 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>YAPA — Services Layer Redesign</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#0b0e14;
+    --bg2:#121822;
+    --surface:#18202e;
+    --surface2:#1f2a3d;
+    --border:#2a3650;
+    --fg:#e2e8f0;
+    --fg2:#94a3b8;
+    --fg3:#64748b;
+    --accent:#4a9eff;
+    --accent2:#7c3aed;
+    --green:#34d399;
+    --orange:#fb923c;
+    --red:#ef4444;
+    --yellow:#fbbf24;
+    --pink:#ec4899;
+    --title-size:clamp(1.75rem,5vw,3.5rem);
+    --h2-size:clamp(1.25rem,3vw,2.25rem);
+    --h3-size:clamp(1rem,2vw,1.5rem);
+    --body-size:clamp(0.8rem,1.4vw,1.1rem);
+    --small-size:clamp(0.7rem,1vw,0.9rem);
+    --code-size:clamp(0.7rem,1.1vw,0.95rem);
+    --slide-padding:clamp(1.5rem,5vw,4rem);
+    --content-gap:clamp(0.6rem,2vw,2rem);
+  }
+  html,body{height:100%;overflow-x:hidden;background:var(--bg);color:var(--fg);font-family:'Inter',system-ui,-apple-system,sans-serif}
+  html{scroll-snap-type:y mandatory;scroll-behavior:smooth}
+  .slide{width:100vw;height:100vh;height:100dvh;overflow:hidden;scroll-snap-align:start;display:flex;flex-direction:column;position:relative}
+  .slide-content{flex:1;display:flex;flex-direction:column;justify-content:center;max-height:100%;overflow:hidden;padding:var(--slide-padding);gap:var(--content-gap)}
+  h1{font-size:var(--title-size);font-weight:800;letter-spacing:-0.03em;line-height:1.1}
+  h2{font-size:var(--h2-size);font-weight:700;letter-spacing:-0.02em}
+  h3{font-size:var(--h3-size);font-weight:600}
+  p,li{font-size:var(--body-size);line-height:1.5;color:var(--fg2)}
+  code{font-family:'JetBrains Mono',monospace;font-size:var(--code-size);background:var(--surface);padding:0.15em 0.4em;border-radius:4px;color:var(--green)}
+  pre{font-family:'JetBrains Mono',monospace;font-size:var(--code-size);background:var(--surface);padding:clamp(0.75rem,1.5vw,1.25rem);border-radius:8px;overflow:hidden;line-height:1.5;border:1px solid var(--border);width:100%}
+  .accent{color:var(--accent)}
+  .green{color:var(--green)}
+  .orange{color:var(--orange)}
+  .pink{color:var(--pink)}
+  .fg3{color:var(--fg3)}
+  .grid{display:grid;gap:clamp(0.5rem,1.5vw,1.25rem);width:100%}
+  .grid-2{grid-template-columns:1fr 1fr}
+  .grid-3{grid-template-columns:1fr 1fr 1fr}
+  .grid-4{grid-template-columns:1fr 1fr 1fr 1fr}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:clamp(0.75rem,1.5vw,1.5rem);display:flex;flex-direction:column;gap:clamp(0.3rem,0.8vw,0.75rem)}
+  .card h3{font-size:var(--h3-size)}
+  .card p,.card li{font-size:var(--body-size)}
+  .card.highlight{border-color:var(--accent);background:linear-gradient(135deg,var(--surface),color-mix(in srgb,var(--accent) 8%,var(--surface)))}
+  .card.warn{border-color:var(--orange);background:linear-gradient(135deg,var(--surface),color-mix(in srgb,var(--orange) 8%,var(--surface)))}
+  .tag{display:inline-block;padding:0.15em 0.6em;border-radius:6px;font-size:var(--small-size);font-weight:600;letter-spacing:0.02em}
+  .tag-blue{background:color-mix(in srgb,var(--accent) 20%,transparent);color:var(--accent)}
+  .tag-green{background:color-mix(in srgb,var(--green) 20%,transparent);color:var(--green)}
+  .tag-orange{background:color-mix(in srgb,var(--orange) 20%,transparent);color:var(--orange)}
+  .tag-pink{background:color-mix(in srgb,var(--pink) 20%,transparent);color:var(--pink)}
+  ul,ol{padding-left:1.2em;display:flex;flex-direction:column;gap:clamp(0.2rem,0.5vw,0.5rem)}
+  li{font-size:var(--body-size);color:var(--fg2)}
+  .badge-row{display:flex;gap:0.5rem;flex-wrap:wrap}
+  .slide-number{position:absolute;bottom:clamp(0.75rem,2vw,1.5rem);right:clamp(0.75rem,2vw,1.5rem);font-size:var(--small-size);color:var(--fg3);font-weight:500}
+  .nav-arrows{position:fixed;bottom:clamp(0.75rem,2vw,1.5rem);left:50%;transform:translateX(-50%);display:flex;gap:0.75rem;z-index:100}
+  .nav-arrows button{background:var(--surface2);border:1px solid var(--border);color:var(--fg2);width:clamp(32px,3vw,44px);height:clamp(32px,3vw,44px);border-radius:50%;cursor:pointer;font-size:clamp(14px,1.2vw,18px);display:flex;align-items:center;justify-content:center;transition:all 0.2s}
+  .nav-arrows button:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .dot-row{position:fixed;bottom:clamp(0.75rem,2vw,1.5rem);left:50%;transform:translateX(-50%);display:flex;gap:0.5rem;z-index:100}
+  .dot{width:clamp(6px,0.6vw,10px);height:clamp(6px,0.6vw,10px);border-radius:50%;background:var(--border);border:none;cursor:pointer;transition:all 0.3s;padding:0}
+  .dot.active{background:var(--accent);transform:scale(1.3)}
+  svg{width:100%;height:auto;display:block;max-height:min(55vh,450px);flex-shrink:0}
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:var(--content-gap);width:100%;flex:1;min-height:0}
+  .two-col > div{display:flex;flex-direction:column;gap:clamp(0.4rem,1vh,1rem);overflow:hidden}
+  .divider{width:1px;background:var(--border);align-self:stretch}
+  .comparison-table{width:100%;border-collapse:collapse;font-size:var(--small-size)}
+  .comparison-table th,.comparison-table td{padding:clamp(0.3rem,0.6vw,0.6rem) clamp(0.4rem,0.8vw,0.8rem);text-align:left;border-bottom:1px solid var(--border);color:var(--fg2)}
+  .comparison-table th{color:var(--fg);font-weight:600;font-size:var(--body-size)}
+  .comparison-table .check{color:var(--green)}
+  .comparison-table .warn-icon{color:var(--orange)}
+  .comparison-table .good{color:var(--green);font-weight:500}
+  .comparison-table .mixed{color:var(--orange);font-weight:500}
+  .collapse{margin-top:auto;flex-shrink:0}
+  @media (max-width:768px){
+    .two-col{grid-template-columns:1fr}
+    .grid-2,.grid-3,.grid-4{grid-template-columns:1fr}
+    .divider{display:none}
+  }
+  @media (max-height:700px){
+    :root{--slide-padding:clamp(0.75rem,3vw,2rem);--content-gap:clamp(0.4rem,1.5vw,1rem);--title-size:clamp(1.4rem,4vw,2.5rem);--h2-size:clamp(1rem,2.5vw,1.75rem)}
+    svg{max-height:35vh}
+  }
+  @media (max-height:500px){
+    :root{--slide-padding:clamp(0.5rem,2vw,1rem)}
+    .dot-row,.nav-arrows{display:none}
+    svg{max-height:25vh}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *,*::before,*::after{animation-duration:0.01ms!important;transition-duration:0.2s!important}
+    html{scroll-behavior:auto}
+    .reveal{opacity:1!important;transform:none!important}
+  }
+  .reveal{opacity:0;transform:translateY(20px);transition:opacity 0.5s ease,transform 0.5s ease}
+  .reveal.visible{opacity:1;transform:translateY(0)}
+  .code-block{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:clamp(0.6rem,1.2vw,1rem);overflow:hidden;font-family:'JetBrains Mono',monospace;font-size:var(--code-size);line-height:1.5;width:100%}
+  .code-block .kw{color:var(--pink)}
+  .code-block .ty{color:var(--accent)}
+  .code-block .str{color:var(--green)}
+  .code-block .cm{color:var(--fg3);font-style:italic}
+  .code-block .fn{color:var(--yellow)}
+</style>
+</head>
+<body>
+
+<!-- ===== SLIDE 1: TITLE ===== -->
+<section class="slide" data-index="0">
+  <div class="slide-content" style="text-align:center;align-items:center">
+    <div class="reveal" style="display:flex;flex-direction:column;gap:clamp(0.5rem,1.5vw,1.5rem);align-items:center;max-width:800px">
+      <span class="tag tag-blue" style="font-size:var(--small-size)">DESIGN PROPOSAL</span>
+      <h1>Services Layer<br><span class="accent">Redesign</span></h1>
+      <p style="font-size:clamp(1rem,1.8vw,1.25rem);color:var(--fg3);max-width:600px">Building an interface-agnostic application core<br>for YAPA's next generation</p>
+      <div style="margin-top:clamp(0.5rem,1.5vw,1.5rem);display:flex;gap:1rem;flex-wrap:wrap;justify-content:center">
+        <span class="tag tag-green">Phase 1: Foundation</span>
+        <span class="tag tag-orange">Phase 2: Tools</span>
+        <span class="tag tag-pink">Phase 3: Agents</span>
+      </div>
+      <p style="font-size:var(--small-size);color:var(--fg3);margin-top:clamp(0.5rem,1vw,1rem)">July 2026</p>
+    </div>
+  </div>
+  <div class="slide-number">1 / 13</div>
+</section>
+
+<!-- ===== SLIDE 2: CURRENT STATE ===== -->
+<section class="slide" data-index="1">
+  <div class="slide-content">
+    <div class="reveal">
+      <div class="badge-row" style="margin-bottom:clamp(0.25rem,0.5vw,0.5rem)">
+        <span class="tag tag-orange">PROBLEM</span>
+      </div>
+      <h2>Current State: The <span class="orange">God Object</span></h2>
+      <p>Today's <code>ConversationService</code> owns session lifecycle, model resolution,<br>streaming, message persistence, auto-titling, and error handling — all in one class.</p>
+    </div>
+
+    <svg viewBox="0 0 800 340" class="reveal">
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0L10,5L0,10Z" fill="#4a9eff"/></marker>
+        <marker id="arrow-dim" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0,0L10,5L0,10Z" fill="#64748b"/></marker>
+      </defs>
+
+      <!-- Central circle -->
+      <rect x="250" y="90" width="300" height="70" rx="35" fill="#1f2a3d" stroke="#fb923c" stroke-width="2.5"/>
+      <text x="400" y="128" text-anchor="middle" fill="#fb923c" font-size="18" font-weight="700" font-family="'Inter',sans-serif">ConversationService</text>
+      <text x="400" y="148" text-anchor="middle" fill="#64748b" font-size="12" font-family="'Inter',sans-serif">265 lines — 10 responsibilities</text>
+
+      <!-- Spokes -->
+      <line x1="400" y1="90" x2="400" y2="30" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-dim)" stroke-dasharray="4 3"/>
+      <rect x="340" y="5" width="120" height="26" rx="4" fill="#18202e" stroke="#64748b" stroke-width="1"/>
+      <text x="400" y="22" text-anchor="middle" fill="#94a3b8" font-size="11" font-family="'Inter',sans-serif">start() / switch_session()</text>
+
+      <line x1="400" y1="160" x2="400" y2="220" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-dim)" stroke-dasharray="4 3"/>
+      <rect x="325" y="218" width="150" height="26" rx="4" fill="#18202e" stroke="#64748b" stroke-width="1"/>
+      <text x="400" y="235" text-anchor="middle" fill="#94a3b8" font-size="11" font-family="'Inter',sans-serif">_save_message()</text>
+
+      <line x1="550" y1="110" x2="660" y2="80" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-dim)" stroke-dasharray="4 3"/>
+      <rect x="645" y="50" width="140" height="28" rx="4" fill="#18202e" stroke="#64748b" stroke-width="1"/>
+      <text x="715" y="68" text-anchor="middle" fill="#94a3b8" font-size="11" font-family="'Inter',sans-serif">ProviderService</text>
+
+      <line x1="550" y1="140" x2="660" y2="170" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-dim)" stroke-dasharray="4 3"/>
+      <rect x="645" y="155" width="140" height="28" rx="4" fill="#18202e" stroke="#64748b" stroke-width="1"/>
+      <text x="715" y="173" text-anchor="middle" fill="#94a3b8" font-size="11" font-family="'Inter',sans-serif">GenericStore&lt;Session&gt;</text>
+
+      <line x1="250" y1="130" x2="140" y2="100" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-dim)" stroke-dasharray="4 3"/>
+      <rect x="15" y="73" width="140" height="28" rx="4" fill="#18202e" stroke="#64748b" stroke-width="1"/>
+      <text x="85" y="91" text-anchor="middle" fill="#94a3b8" font-size="11" font-family="'Inter',sans-serif">get_model() lookup</text>
+
+      <line x1="250" y1="150" x2="140" y2="180" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-dim)" stroke-dasharray="4 3"/>
+      <rect x="0" y="175" width="155" height="28" rx="4" fill="#18202e" stroke="#64748b" stroke-width="1"/>
+      <text x="77" y="193" text-anchor="middle" fill="#94a3b8" font-size="11" font-family="'Inter',sans-serif">resolve_model() config</text>
+
+      <!-- Pain callout -->
+      <rect x="580" y="250" width="210" height="70" rx="8" fill="#2a1f2a" stroke="#ef4444" stroke-width="1" stroke-dasharray="5 3"/>
+      <text x="685" y="272" text-anchor="middle" fill="#ef4444" font-size="13" font-weight="600" font-family="'Inter',sans-serif">Pain Points</text>
+      <text x="685" y="292" text-anchor="middle" fill="#94a3b8" font-size="11" font-family="'Inter',sans-serif">• Mixed concerns, hard to test</text>
+      <text x="685" y="308" text-anchor="middle" fill="#94a3b8" font-size="11" font-family="'Inter',sans-serif">• No extension points for tools</text>
+    </svg>
+  </div>
+  <div class="slide-number">2 / 13</div>
+</section>
+
+<!-- ===== SLIDE 3: TARGET ARCHITECTURE ===== -->
+<section class="slide" data-index="2">
+  <div class="slide-content">
+    <div class="reveal">
+      <div class="badge-row"><span class="tag tag-blue">VISION</span></div>
+      <h2>Target Architecture</h2>
+      <p>Services layer becomes the <strong>core of the application</strong>.<br>Everything else — CLI, REST API, WebSocket, web UI — is a consumer.</p>
+    </div>
+
+    <svg viewBox="0 0 800 370" class="reveal">
+      <!-- Layer 1: Clients -->
+      <rect x="50" y="10" width="700" height="55" rx="6" fill="#1f2a3d" stroke="#64748b" stroke-width="1.5"/>
+      <text x="400" y="28" text-anchor="middle" fill="#94a3b8" font-size="11" font-family="'Inter',sans-serif" font-weight="600">CLIENTS</text>
+      <text x="180" y="50" text-anchor="middle" fill="#64748b" font-size="12" font-family="'Inter',sans-serif">CLI</text>
+      <text x="340" y="50" text-anchor="middle" fill="#64748b" font-size="12" font-family="'Inter',sans-serif">Web UI</text>
+      <text x="500" y="50" text-anchor="middle" fill="#64748b" font-size="12" font-family="'Inter',sans-serif">3rd-party Apps</text>
+      <text x="650" y="50" text-anchor="middle" fill="#64748b" font-size="12" font-family="'Inter',sans-serif">Automation</text>
+
+      <!-- Layer 2: Transport -->
+      <rect x="50" y="85" width="700" height="55" rx="6" fill="#1f2a3d" stroke="#4a9eff" stroke-width="1.5" stroke-dasharray="6 4"/>
+      <text x="400" y="103" text-anchor="middle" fill="#4a9eff" font-size="11" font-family="'Inter',sans-serif" font-weight="600">ROUTING / TRANSPORT</text>
+      <text x="230" y="125" text-anchor="middle" fill="#64748b" font-size="12" font-family="'Inter',sans-serif">FastAPI REST Endpoints</text>
+      <text x="530" y="125" text-anchor="middle" fill="#64748b" font-size="12" font-family="'Inter',sans-serif">WebSocket Gateway</text>
+
+      <!-- Arrow -->
+      <line x1="400" y1="140" x2="400" y2="163" stroke="#4a9eff" stroke-width="2" marker-end="url(#arrow)"/>
+
+      <!-- Layer 3: Services -->
+      <rect x="50" y="165" width="700" height="105" rx="8" fill="#121822" stroke="#7c3aed" stroke-width="2"/>
+      <text x="400" y="188" text-anchor="middle" fill="#7c3aed" font-size="12" font-family="'Inter',sans-serif" font-weight="700">SERVICES LAYER</text>
+
+      <rect x="75" y="200" width="140" height="50" rx="6" fill="#18202e" stroke="#4a9eff" stroke-width="1.5"/>
+      <text x="145" y="222" text-anchor="middle" fill="#4a9eff" font-size="13" font-family="'Inter',sans-serif" font-weight="600">ChatService</text>
+      <text x="145" y="240" text-anchor="middle" fill="#64748b" font-size="10" font-family="'Inter',sans-serif">streaming, orchestration</text>
+
+      <rect x="235" y="200" width="140" height="50" rx="6" fill="#18202e" stroke="#34d399" stroke-width="1.5"/>
+      <text x="305" y="222" text-anchor="middle" fill="#34d399" font-size="13" font-family="'Inter',sans-serif" font-weight="600">SessionService</text>
+      <text x="305" y="240" text-anchor="middle" fill="#64748b" font-size="10" font-family="'Inter',sans-serif">CRUD, listing</text>
+
+      <rect x="395" y="200" width="140" height="50" rx="6" fill="#18202e" stroke="#fb923c" stroke-width="1.5"/>
+      <text x="465" y="222" text-anchor="middle" fill="#fb923c" font-size="13" font-family="'Inter',sans-serif" font-weight="600">ModelService</text>
+      <text x="465" y="240" text-anchor="middle" fill="#64748b" font-size="10" font-family="'Inter',sans-serif">listing, resolution</text>
+
+      <rect x="555" y="200" width="170" height="50" rx="6" fill="#18202e" stroke="#fbbf24" stroke-width="1.5"/>
+      <text x="640" y="222" text-anchor="middle" fill="#fbbf24" font-size="13" font-family="'Inter',sans-serif" font-weight="600">ConfigService</text>
+      <text x="640" y="240" text-anchor="middle" fill="#64748b" font-size="10" font-family="'Inter',sans-serif">config I/O</text>
+
+      <!-- Arrow -->
+      <line x1="400" y1="270" x2="400" y2="293" stroke="#7c3aed" stroke-width="2" marker-end="url(#arrow)"/>
+
+      <!-- Layer 4: Storage / Providers -->
+      <rect x="50" y="295" width="700" height="55" rx="6" fill="#1f2a3d" stroke="#34d399" stroke-width="1.5"/>
+      <text x="400" y="315" text-anchor="middle" fill="#34d399" font-size="11" font-family="'Inter',sans-serif" font-weight="600">STORAGE / PROVIDERS</text>
+      <text x="200" y="337" text-anchor="middle" fill="#64748b" font-size="12" font-family="'Inter',sans-serif">JSON File Store</text>
+      <text x="400" y="337" text-anchor="middle" fill="#64748b" font-size="12" font-family="'Inter',sans-serif">LLM Providers (OpenAI, etc.)</text>
+      <text x="580" y="337" text-anchor="middle" fill="#64748b" font-size="12" font-family="'Inter',sans-serif">Config File</text>
+    </svg>
+  </div>
+  <div class="slide-number">3 / 13</div>
+</section>
+
+<!-- ===== SLIDE 4: PHASE 1 SERVICE MAP ===== -->
+<section class="slide" data-index="3">
+  <div class="slide-content">
+    <div class="reveal">
+      <div class="badge-row"><span class="tag tag-blue">ARCHITECTURE</span></div>
+      <h2>Phase 1 Service Map</h2>
+      <p>Services depend on <strong>protocols</strong> (abstractions), not concrete storage.<br>Solid arrows = direct dependency. Dashed = protocol/interface.</p>
+    </div>
+
+    <svg viewBox="0 0 760 330" class="reveal">
+      <defs>
+        <marker id="a" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0,0L10,5L0,10Z" fill="#4a9eff"/></marker>
+        <marker id="a-dim" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0,0L10,5L0,10Z" fill="#64748b"/></marker>
+      </defs>
+
+      <!-- ChatService center -->
+      <rect x="250" y="20" width="260" height="60" rx="10" fill="#121822" stroke="#4a9eff" stroke-width="2.5"/>
+      <text x="380" y="49" text-anchor="middle" fill="#4a9eff" font-size="18" font-weight="700" font-family="'Inter',sans-serif">ChatService</text>
+      <text x="380" y="68" text-anchor="middle" fill="#64748b" font-size="11" font-family="'Inter',sans-serif">stream_response() · start() · auto_title()</text>
+
+      <!-- SessionService -->
+      <rect x="30" y="120" width="190" height="65" rx="8" fill="#18202e" stroke="#34d399" stroke-width="1.5"/>
+      <text x="125" y="145" text-anchor="middle" fill="#34d399" font-size="14" font-weight="600" font-family="'Inter',sans-serif">SessionService</text>
+      <text x="125" y="162" text-anchor="middle" fill="#64748b" font-size="11" font-family="'Inter',sans-serif">CRUD · list · add_message</text>
+      <text x="125" y="178" text-anchor="middle" fill="#64748b" font-size="10" font-family="'Inter',sans-serif">depends on SessionStore</text>
+      <line x1="250" y1="60" x2="220" y2="120" stroke="#4a9eff" stroke-width="1.5" marker-end="url(#a)"/>
+
+      <!-- ModelService -->
+      <rect x="290" y="120" width="190" height="65" rx="8" fill="#18202e" stroke="#fb923c" stroke-width="1.5"/>
+      <text x="385" y="145" text-anchor="middle" fill="#fb923c" font-size="14" font-weight="600" font-family="'Inter',sans-serif">ModelService</text>
+      <text x="385" y="162" text-anchor="middle" fill="#64748b" font-size="11" font-family="'Inter',sans-serif">list_models · get_model</text>
+      <text x="385" y="178" text-anchor="middle" fill="#64748b" font-size="10" font-family="'Inter',sans-serif">wraps ProviderRegistry</text>
+      <line x1="400" y1="80" x2="400" y2="120" stroke="#4a9eff" stroke-width="1.5" marker-end="url(#a)"/>
+
+      <!-- ConfigService -->
+      <rect x="540" y="120" width="190" height="65" rx="8" fill="#18202e" stroke="#fbbf24" stroke-width="1.5"/>
+      <text x="635" y="145" text-anchor="middle" fill="#fbbf24" font-size="14" font-weight="600" font-family="'Inter',sans-serif">ConfigStore</text>
+      <text x="635" y="162" text-anchor="middle" fill="#64748b" font-size="11" font-family="'Inter',sans-serif">load · save</text>
+      <text x="635" y="178" text-anchor="middle" fill="#64748b" font-size="10" font-family="'Inter',sans-serif">protocol / abstract</text>
+      <line x1="510" y1="60" x2="565" y2="120" stroke="#4a9eff" stroke-width="1.5" marker-end="url(#a)"/>
+
+      <!-- Concrete implementations -->
+      <rect x="130" y="230" width="220" height="55" rx="8" fill="#1f2a3d" stroke="#64748b" stroke-width="1" stroke-dasharray="5 3"/>
+      <text x="240" y="253" text-anchor="middle" fill="#64748b" font-size="13" font-weight="600" font-family="'Inter',sans-serif">JsonSessionStore</text>
+      <text x="240" y="272" text-anchor="middle" fill="#64748b" font-size="11" font-family="'Inter',sans-serif">implements SessionStore protocol</text>
+      <line x1="195" y1="185" x2="225" y2="230" stroke="#64748b" stroke-width="1.5" marker-end="url(#a-dim)" stroke-dasharray="4 3"/>
+
+      <rect x="410" y="230" width="220" height="55" rx="8" fill="#1f2a3d" stroke="#64748b" stroke-width="1" stroke-dasharray="5 3"/>
+      <text x="520" y="253" text-anchor="middle" fill="#64748b" font-size="13" font-weight="600" font-family="'Inter',sans-serif">JsonConfigStore</text>
+      <text x="520" y="272" text-anchor="middle" fill="#64748b" font-size="11" font-family="'Inter',sans-serif">implements ConfigStore protocol</text>
+      <line x1="580" y1="185" x2="550" y2="230" stroke="#64748b" stroke-width="1.5" marker-end="url(#a-dim)" stroke-dasharray="4 3"/>
+
+      <!-- Protocol label -->
+      <text x="665" y="245" text-anchor="middle" fill="#64748b" font-size="10" font-family="'Inter',sans-serif" font-style="italic">protocol</text>
+      <line x1="650" y1="235" x2="630" y2="242" stroke="#64748b" stroke-width="1" stroke-dasharray="3 2"/>
+      <line x1="650" y1="235" x2="670" y2="242" stroke="#64748b" stroke-width="1" stroke-dasharray="3 2"/>
+    </svg>
+  </div>
+  <div class="slide-number">4 / 13</div>
+</section>
+
+<!-- ===== SLIDE 5: PROTOCOL CONTRACTS ===== -->
+<section class="slide" data-index="4">
+  <div class="slide-content">
+    <div class="reveal">
+      <div class="badge-row"><span class="tag tag-green">CONTRACTS</span></div>
+      <h2>Protocol Contracts</h2>
+      <p>Services depend on protocols, not concrete implementations.<br>Swap JSON for SQLite later without touching a service.</p>
+    </div>
+
+    <div class="two-col reveal">
+      <div>
+        <h3 style="font-size:var(--h3-size);color:var(--green)">SessionStore Protocol</h3>
+        <div class="code-block">
+          <span class="kw">class</span> <span class="ty">SessionStore</span>(Protocol):<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">def</span> <span class="fn">load</span>(<span class="kw">self</span>, id: <span class="ty">str</span>) -> <span class="ty">Session</span>: ...<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">def</span> <span class="fn">save</span>(<span class="kw">self</span>, session: <span class="ty">Session</span>, *, overwrite: <span class="ty">bool</span>=<span class="kw">False</span>): ...<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">def</span> <span class="fn">list</span>(<span class="kw">self</span>) -> <span class="ty">list</span>[<span class="ty">Session</span>]: ...<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">def</span> <span class="fn">delete</span>(<span class="kw">self</span>, id: <span class="ty">str</span>): ...<br><br>
+          <span class="cm"># Concrete implementation:</span><br>
+          <span class="kw">class</span> <span class="ty">JsonSessionStore</span>:<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;<span class="cm"># wraps GenericStore[Session]</span>
+        </div>
+      </div>
+      <div>
+        <h3 style="font-size:var(--h3-size);color:var(--yellow)">ConfigStore Protocol</h3>
+        <div class="code-block">
+          <span class="kw">class</span> <span class="ty">ConfigStore</span>(Protocol):<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">def</span> <span class="fn">load</span>(<span class="kw">self</span>) -> <span class="ty">Config</span>: ...<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">def</span> <span class="fn">save</span>(<span class="kw">self</span>, config: <span class="ty">Config</span>): ...<br><br>
+          <span class="cm"># Concrete implementation:</span><br>
+          <span class="kw">class</span> <span class="ty">JsonConfigStore</span>:<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;<span class="cm"># wraps current config.py logic</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="reveal" style="margin-top:auto;flex-shrink:0">
+      <div class="card" style="background:var(--surface);border-color:var(--accent);padding:clamp(0.5rem,1vw,1rem)">
+        <p style="color:var(--fg);font-weight:500">Key principle: Services never import <code style="background:var(--surface2)">GenericStore</code> or <code style="background:var(--surface2)">json</code> directly.</p>
+      </div>
+    </div>
+  </div>
+  <div class="slide-number">5 / 13</div>
+</section>
+
+<!-- ===== SLIDE 6: EVENT STREAMING CONTRACT ===== -->
+<section class="slide" data-index="5">
+  <div class="slide-content">
+    <div class="reveal">
+      <div class="badge-row"><span class="tag tag-green">STREAMING</span></div>
+      <h2>Event Streaming Contract</h2>
+      <p><code>ChatService.stream(prompt)</code> yields <code>Event</code> objects using existing<br>event types — ready for WebSocket transport from day one.</p>
+    </div>
+
+    <svg viewBox="0 0 760 160" class="reveal">
+      <defs>
+        <marker id="flow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0L10,5L0,10Z" fill="#4a9eff"/></marker>
+      </defs>
+      <rect x="10" y="20" width="130" height="50" rx="8" fill="#18202e" stroke="#34d399" stroke-width="1.5"/>
+      <text x="75" y="49" text-anchor="middle" fill="#34d399" font-size="13" font-weight="600" font-family="'Inter',sans-serif">Consumer</text>
+      <line x1="140" y1="45" x2="180" y2="45" stroke="#4a9eff" stroke-width="2" marker-end="url(#flow)"/>
+      <rect x="185" y="20" width="140" height="50" rx="8" fill="#121822" stroke="#4a9eff" stroke-width="2"/>
+      <text x="255" y="49" text-anchor="middle" fill="#4a9eff" font-size="13" font-weight="600" font-family="'Inter',sans-serif">ChatService</text>
+      <line x1="325" y1="45" x2="365" y2="45" stroke="#4a9eff" stroke-width="2" marker-end="url(#flow)"/>
+      <rect x="370" y="20" width="150" height="50" rx="8" fill="#18202e" stroke="#fb923c" stroke-width="1.5"/>
+      <text x="445" y="49" text-anchor="middle" fill="#fb923c" font-size="13" font-weight="600" font-family="'Inter',sans-serif">InferenceProvider</text>
+
+      <!-- Event types below -->
+      <rect x="60" y="100" width="150" height="28" rx="6" fill="#1f2a3d" stroke="#4a9eff" stroke-width="1"/>
+      <text x="135" y="118" text-anchor="middle" fill="#4a9eff" font-size="11" font-family="'Inter',sans-serif">AgentStartEvent</text>
+      <rect x="230" y="100" width="150" height="28" rx="6" fill="#1f2a3d" stroke="#34d399" stroke-width="1"/>
+      <text x="305" y="118" text-anchor="middle" fill="#34d399" font-size="11" font-family="'Inter',sans-serif">(TextEvent | ReasoningEvent)*</text>
+      <rect x="420" y="100" width="150" height="28" rx="6" fill="#1f2a3d" stroke="#fb923c" stroke-width="1"/>
+      <text x="495" y="118" text-anchor="middle" fill="#fb923c" font-size="11" font-family="'Inter',sans-serif">AgentDoneEvent</text>
+      <text x="610" y="118" text-anchor="middle" fill="#64748b" font-size="11" font-family="'Inter',sans-serif">+ finish_reason, usage</text>
+    </svg>
+
+    <div class="two-col reveal" style="flex-shrink:0">
+      <div>
+        <div class="code-block" style="font-size:clamp(0.6rem,0.9vw,0.8rem)">
+          <span class="cm"># Producer side</span><br>
+          <span class="kw">async def</span> <span class="fn">stream</span>(<span class="kw">self</span>, prompt: <span class="ty">str</span>) -&gt; <span class="ty">AsyncGenerator</span>[<span class="ty">Event</span>, <span class="kw">None</span>]:<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;yield AgentStartEvent(model=<span class="kw">self</span>._model.id)<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">async for</span> delta <span class="kw">in</span> provider.invoke_llm_stream(...):<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">if</span> delta.content:<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;yield TextEvent(content=delta.content)<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">if</span> delta.reasoning_content:<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;yield ReasoningEvent(content=...)<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;yield AgentDoneEvent(content=..., finish_reason=...)
+        </div>
+      </div>
+      <div>
+        <div class="code-block" style="font-size:clamp(0.6rem,0.9vw,0.8rem)">
+          <span class="cm"># Consumer (any client)</span><br>
+          <span class="kw">async for</span> event <span class="kw">in</span> chat.stream(<span class="str">"Hello"</span>):<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">match</span> event:<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">case</span> AgentStartEvent():<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;show_header(event.model)<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">case</span> TextEvent():<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;buffer += event.content<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">case</span> AgentDoneEvent():<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;persist(event)
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-number">6 / 13</div>
+</section>
+
+<!-- ===== SLIDE 7: CHATSERVICE VS ORCHESTRATOR HEAD-TO-HEAD ===== -->
+<section class="slide" data-index="6">
+  <div class="slide-content">
+    <div class="reveal">
+      <div class="badge-row"><span class="tag tag-orange">COMPARISON</span></div>
+      <h2>ChatService vs Orchestrator — Head-to-Head</h2>
+      <p>Two approaches for structuring the chat flow coordinator.</p>
+    </div>
+
+    <svg viewBox="0 0 760 240" class="reveal">
+      <text x="190" y="25" text-anchor="middle" fill="#4a9eff" font-size="16" font-weight="700" font-family="'Inter',sans-serif">ChatService (Recommended)</text>
+      <text x="570" y="25" text-anchor="middle" fill="#7c3aed" font-size="16" font-weight="700" font-family="'Inter',sans-serif">Orchestrator (Future)</text>
+
+      <rect x="20" y="40" width="120" height="36" rx="6" fill="#18202e" stroke="#4a9eff" stroke-width="1.5"/>
+      <text x="80" y="63" text-anchor="middle" fill="#4a9eff" font-size="11" font-weight="600" font-family="'Inter',sans-serif">ChatService</text>
+
+      <rect x="420" y="40" width="120" height="36" rx="6" fill="#18202e" stroke="#7c3aed" stroke-width="1.5"/>
+      <text x="480" y="63" text-anchor="middle" fill="#7c3aed" font-size="11" font-weight="600" font-family="'Inter',sans-serif">Orchestrator</text>
+
+      <!-- ChatService deps -->
+      <line x1="80" y1="76" x2="80" y2="100" stroke="#4a9eff" stroke-width="1.5"/>
+      <rect x="5" y="100" width="150" height="28" rx="4" fill="#1f2a3d" stroke="#34d399" stroke-width="1"/>
+      <text x="80" y="118" text-anchor="middle" fill="#94a3b8" font-size="10" font-family="'Inter',sans-serif">SessionService</text>
+      <rect x="5" y="135" width="150" height="28" rx="4" fill="#1f2a3d" stroke="#fb923c" stroke-width="1"/>
+      <text x="80" y="153" text-anchor="middle" fill="#94a3b8" font-size="10" font-family="'Inter',sans-serif">ModelService</text>
+      <rect x="5" y="170" width="150" height="28" rx="4" fill="#1f2a3d" stroke="#fbbf24" stroke-width="1"/>
+      <text x="80" y="188" text-anchor="middle" fill="#94a3b8" font-size="10" font-family="'Inter',sans-serif">ConfigStore</text>
+
+      <!-- Separator -->
+      <line x1="200" y1="40" x2="200" y2="210" stroke="#2a3650" stroke-width="1"/>
+
+      <!-- Orchestrator deps -->
+      <line x1="480" y1="76" x2="480" y2="100" stroke="#7c3aed" stroke-width="1.5"/>
+      <rect x="390" y="100" width="180" height="22" rx="4" fill="#1f2a3d" stroke="#34d399" stroke-width="1"/>
+      <text x="480" y="115" text-anchor="middle" fill="#94a3b8" font-size="10" font-family="'Inter',sans-serif">SessionManager</text>
+      <rect x="390" y="126" width="180" height="22" rx="4" fill="#1f2a3d" stroke="#4a9eff" stroke-width="1"/>
+      <text x="480" y="141" text-anchor="middle" fill="#94a3b8" font-size="10" font-family="'Inter',sans-serif">StreamService</text>
+      <rect x="390" y="152" width="180" height="22" rx="4" fill="#1f2a3d" stroke="#fb923c" stroke-width="1"/>
+      <text x="480" y="167" text-anchor="middle" fill="#94a3b8" font-size="10" font-family="'Inter',sans-serif">PromptBuilder</text>
+      <rect x="390" y="178" width="180" height="22" rx="4" fill="#1f2a3d" stroke="#fbbf24" stroke-width="1"/>
+      <text x="480" y="193" text-anchor="middle" fill="#94a3b8" font-size="10" font-family="'Inter',sans-serif">EventBus</text>
+      <rect x="390" y="204" width="180" height="22" rx="4" fill="#1f2a3d" stroke="#ec4899" stroke-width="1"/>
+      <text x="480" y="219" text-anchor="middle" fill="#94a3b8" font-size="10" font-family="'Inter',sans-serif">ConfigStore</text>
+
+      <!-- Phase labels -->
+      <text x="115" y="225" text-anchor="middle" fill="#34d399" font-size="10" font-weight="600" font-family="'Inter',sans-serif">Phase 1</text>
+      <text x="490" y="235" text-anchor="middle" fill="#7c3aed" font-size="10" font-weight="600" font-family="'Inter',sans-serif">Future (Phase 3+)</text>
+    </svg>
+
+    <div class="reveal">
+      <div class="card" style="background:var(--surface);border-color:var(--accent);padding:clamp(0.5rem,1vw,1rem)">
+        <p style="color:var(--fg);font-weight:500">ChatService has 3 deps. Orchestrator has 5+ deps, 4 of which are trivial wrappers.</p>
+      </div>
+    </div>
+  </div>
+  <div class="slide-number">7 / 13</div>
+</section>
+
+<!-- ===== SLIDE 8: RESTAURANT ANALOGY ===== -->
+<section class="slide" data-index="7">
+  <div class="slide-content">
+    <div class="reveal">
+      <div class="badge-row"><span class="tag tag-orange">ANALOGY</span></div>
+      <h2>The Restaurant</h2>
+    </div>
+
+    <svg viewBox="0 0 800 250" class="reveal">
+      <!-- ChatService side -->
+      <rect x="30" y="10" width="340" height="230" rx="12" fill="#121822" stroke="#4a9eff" stroke-width="2"/>
+      <text x="200" y="40" text-anchor="middle" fill="#4a9eff" font-size="16" font-weight="700" font-family="'Inter',sans-serif">ChatService = Full-Service Restaurant</text>
+
+      <text x="200" y="75" text-anchor="middle" fill="#e2e8f0" font-size="13" font-weight="600" font-family="'Inter',sans-serif">👨‍🍳 Chef</text>
+      <text x="200" y="95" text-anchor="middle" fill="#94a3b8" font-size="12" font-family="'Inter',sans-serif">Sous chef, line cook, baker — all one person</text>
+
+      <text x="200" y="125" text-anchor="middle" fill="#e2e8f0" font-size="13" font-weight="600" font-family="'Inter',sans-serif">✔ Takes order, cooks, plates, runs the dish</text>
+      <text x="200" y="148" text-anchor="middle" fill="#94a3b8" font-size="12" font-family="'Inter',sans-serif">Single point of control — easy to understand</text>
+      <text x="200" y="171" text-anchor="middle" fill="#94a3b8" font-size="12" font-family="'Inter',sans-serif">Works great for a small kitchen (Phase 1)</text>
+
+      <text x="200" y="205" text-anchor="middle" fill="#fb923c" font-size="12" font-family="'Inter',sans-serif">When the menu expands (tools, agents)...</text>
+      <text x="200" y="226" text-anchor="middle" fill="#fb923c" font-size="12" font-family="'Inter',sans-serif">...hire more staff (extract sub-services)</text>
+
+      <!-- Orchestrator side -->
+      <rect x="410" y="10" width="360" height="230" rx="12" fill="#121822" stroke="#7c3aed" stroke-width="2"/>
+      <text x="590" y="40" text-anchor="middle" fill="#7c3aed" font-size="16" font-weight="700" font-family="'Inter',sans-serif">Orchestrator = Food Court</text>
+
+      <text x="590" y="75" text-anchor="middle" fill="#e2e8f0" font-size="13" font-weight="600" font-family="'Inter',sans-serif">🏪 Manager</text>
+      <text x="590" y="95" text-anchor="middle" fill="#94a3b8" font-size="12" font-family="'Inter',sans-serif">Coordinates 6+ specialized vendors</text>
+
+      <text x="590" y="125" text-anchor="middle" fill="#e2e8f0" font-size="13" font-weight="600" font-family="'Inter',sans-serif">✔ Each vendor does one thing well</text>
+      <text x="590" y="148" text-anchor="middle" fill="#94a3b8" font-size="12" font-family="'Inter',sans-serif">Scales to any number of vendors</text>
+      <text x="590" y="171" text-anchor="middle" fill="#ff8787" font-size="12" font-family="'Inter',sans-serif">✘ Overhead: lease 6 stalls for a coffee shop</text>
+
+      <text x="590" y="205" text-anchor="middle" fill="#34d399" font-size="12" font-family="'Inter',sans-serif">Perfect when you actually have 6+ vendors</text>
+      <text x="590" y="226" text-anchor="middle" fill="#34d399" font-size="12" font-family="'Inter',sans-serif">...but overkill until then</text>
+    </svg>
+
+    <div class="reveal" style="flex-shrink:0">
+      <p style="font-size:var(--body-size);color:var(--fg2);text-align:center">
+        <strong style="color:var(--fg)">Phase 1:</strong> We're a small kitchen. One chef works.
+        <strong style="color:var(--fg)">Phase 3:</strong> We expand to a food court by hiring specialists.
+      </p>
+    </div>
+  </div>
+  <div class="slide-number">8 / 13</div>
+</section>
+
+<!-- ===== SLIDE 9: CODE COMPARISON ===== -->
+<section class="slide" data-index="8">
+  <div class="slide-content">
+    <div class="reveal">
+      <div class="badge-row"><span class="tag tag-orange">DETAIL</span></div>
+      <h2>Code Comparison</h2>
+      <p>How the streaming loop looks in each approach.</p>
+    </div>
+
+    <div class="two-col reveal">
+      <div>
+        <h3 style="font-size:var(--h3-size);color:var(--accent)">ChatService</h3>
+        <div class="code-block" style="font-size:clamp(0.55rem,0.85vw,0.78rem)">
+          <span class="kw">class</span> <span class="ty">ChatService</span>:<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">def</span> <span class="fn">__init__</span>(<span class="kw">self</span>, sessions, models, config):<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">self</span>._sessions = sessions<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">self</span>._models = models<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">self</span>._config = config<br><br>
+          &nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">async def</span> <span class="fn">stream</span>(<span class="kw">self</span>, prompt):<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;provider = <span class="kw">self</span>._models.get_provider(<span class="kw">self</span>._model)<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;yield AgentStartEvent(<span class="kw">self</span>._model.id)<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">async for</span> delta <span class="kw">in</span> provider.invoke_stream(...):<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">if</span> delta.content:<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;yield TextEvent(delta.content)<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">if</span> delta.reasoning:<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;yield ReasoningEvent(delta.reasoning)<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;yield AgentDoneEvent(content)<br><br>
+          &nbsp;&nbsp;&nbsp;&nbsp;save_session_after(response)
+        </div>
+      </div>
+      <div>
+        <h3 style="font-size:var(--h3-size);color:var(--pink)">Orchestrator</h3>
+        <div class="code-block" style="font-size:clamp(0.55rem,0.85vw,0.78rem)">
+          <span class="kw">class</span> <span class="ty">Orchestrator</span>:<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">def</span> <span class="fn">__init__</span>(<span class="kw">self</span>, session_manager, stream_service,<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;prompt_builder, event_bus, config):<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">self</span>._sm = session_manager<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">self</span>._ss = stream_service<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">self</span>._pb = prompt_builder<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">self</span>._eb = event_bus<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">self</span>._config = config<br><br>
+          &nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">async def</span> <span class="fn">execute</span>(<span class="kw">self</span>, prompt):<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;messages = <span class="kw">self</span>._pb.build(...)<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">self</span>._eb.emit(AgentStartEvent(...))<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">async for</span> delta <span class="kw">in</span> <span class="kw">self</span>._ss.stream(messages):<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">self</span>._eb.emit(to_event(delta))<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">self</span>._sm.persist(messages + response)
+        </div>
+      </div>
+    </div>
+
+    <div class="reveal" style="flex-shrink:0">
+      <div class="card warn" style="padding:clamp(0.4rem,0.8vw,0.75rem)">
+        <p style="font-size:var(--small-size);color:var(--fg2)"><strong style="color:var(--orange)">Orchestrator overhead:</strong> <code>PromptBuilder</code> wraps a list concatenation. <code>StreamService</code> wraps <code>provider.invoke_llm_stream()</code>. <code>EventBus.emit()</code> adds indirection that Phase 1 doesn't need.</p>
+      </div>
+    </div>
+  </div>
+  <div class="slide-number">9 / 13</div>
+</section>
+
+<!-- ===== SLIDE 10: TRADE-OFF MATRIX ===== -->
+<section class="slide" data-index="9">
+  <div class="slide-content">
+    <div class="reveal">
+      <div class="badge-row"><span class="tag tag-orange">DECISION</span></div>
+      <h2>Trade-off Matrix</h2>
+    </div>
+
+    <div class="reveal" style="overflow:hidden;flex-shrink:0">
+      <table class="comparison-table">
+        <thead>
+          <tr>
+            <th>Dimension</th>
+            <th>ChatService</th>
+            <th>Orchestrator</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="color:var(--fg);font-weight:500">Onboarding</td>
+            <td class="good">One class to read, one flow to trace</td>
+            <td class="mixed">5+ classes to understand first</td>
+          </tr>
+          <tr>
+            <td style="color:var(--fg);font-weight:500">Test complexity</td>
+            <td class="good">Mock 3 protocol deps, test one unit</td>
+            <td class="mixed">Mock 5+ deps, plus integration tests for Orchestrator</td>
+          </tr>
+          <tr>
+            <td style="color:var(--fg);font-weight:500">Phase 2: Tools</td>
+            <td class="good">Add ToolService dep to ChatService. Tool loop in one place.</td>
+            <td class="good">ToolService slots in as another sub-service. Clean.</td>
+          </tr>
+          <tr>
+            <td style="color:var(--fg);font-weight:500">Phase 3: Memory/MCP</td>
+            <td class="mixed">More deps on ChatService. Extract sub-services as needed.</td>
+            <td class="good">Add more sub-services. No refactor needed.</td>
+          </tr>
+          <tr>
+            <td style="color:var(--fg);font-weight:500">God class risk</td>
+            <td class="mixed">Medium — must actively extract as scope grows</td>
+            <td class="good">Low — orchestration is the only job</td>
+          </tr>
+          <tr>
+            <td style="color:var(--fg);font-weight:500">Over-engineering risk</td>
+            <td class="good">Low — right-sized for current needs</td>
+            <td class="mixed">High — 4 of 6 sub-services are thin wrappers</td>
+          </tr>
+          <tr>
+            <td style="color:var(--fg);font-weight:500">Iteration speed</td>
+            <td class="good">Change one file, test one file</td>
+            <td class="mixed">Change propagates across sub-services</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="reveal" style="flex-shrink:0">
+      <div class="card" style="background:var(--surface);border-color:var(--accent);padding:clamp(0.4rem,0.8vw,0.75rem)">
+        <p style="font-size:var(--body-size);color:var(--fg);font-weight:500">ChatService wins on simplicity, iteration speed, and right-sizing.<br>The extraction to Orchestrator happens naturally when Phase 3 requires it.</p>
+      </div>
+    </div>
+  </div>
+  <div class="slide-number">10 / 13</div>
+</section>
+
+<!-- ===== SLIDE 11: EVOLUTION PATH ===== -->
+<section class="slide" data-index="10">
+  <div class="slide-content">
+    <div class="reveal">
+      <div class="badge-row"><span class="tag tag-blue">STRATEGY</span></div>
+      <h2>Evolution Path</h2>
+      <p>Design extension hooks now. Ship the simplest thing. Extract when the weight justifies it.</p>
+    </div>
+
+    <svg viewBox="0 0 760 200" class="reveal">
+      <!-- Timeline -->
+      <line x1="50" y1="100" x2="710" y2="100" stroke="#2a3650" stroke-width="3"/>
+
+      <!-- Phase markers -->
+      <circle cx="130" cy="100" r="16" fill="#121822" stroke="#4a9eff" stroke-width="3"/>
+      <text x="130" y="105" text-anchor="middle" fill="#4a9eff" font-size="14" font-weight="700" font-family="'Inter',sans-serif">1</text>
+      <text x="130" y="145" text-anchor="middle" fill="#4a9eff" font-size="14" font-weight="600" font-family="'Inter',sans-serif">NOW</text>
+      <rect x="40" y="155" width="180" height="40" rx="6" fill="#1f2a3d" stroke="#4a9eff" stroke-width="1"/>
+      <text x="130" y="172" text-anchor="middle" fill="#94a3b8" font-size="11" font-family="'Inter',sans-serif">ChatService · SessionService</text>
+      <text x="130" y="188" text-anchor="middle" fill="#94a3b8" font-size="11" font-family="'Inter',sans-serif">ModelService · ConfigStore</text>
+
+      <circle cx="380" cy="100" r="16" fill="#121822" stroke="#fb923c" stroke-width="3"/>
+      <text x="380" y="105" text-anchor="middle" fill="#fb923c" font-size="14" font-weight="700" font-family="'Inter',sans-serif">2</text>
+      <text x="380" y="145" text-anchor="middle" fill="#fb923c" font-size="14" font-weight="600" font-family="'Inter',sans-serif">NEXT</text>
+      <rect x="280" y="155" width="200" height="40" rx="6" fill="#1f2a3d" stroke="#fb923c" stroke-width="1"/>
+      <text x="380" y="172" text-anchor="middle" fill="#94a3b8" font-size="11" font-family="'Inter',sans-serif">+ ToolService</text>
+      <text x="380" y="188" text-anchor="middle" fill="#94a3b8" font-size="11" font-family="'Inter',sans-serif">+ ApprovalService</text>
+
+      <circle cx="630" cy="100" r="16" fill="#121822" stroke="#ec4899" stroke-width="3"/>
+      <text x="630" y="105" text-anchor="middle" fill="#ec4899" font-size="14" font-weight="700" font-family="'Inter',sans-serif">3</text>
+      <text x="630" y="145" text-anchor="middle" fill="#ec4899" font-size="14" font-weight="600" font-family="'Inter',sans-serif">FUTURE</text>
+      <rect x="525" y="155" width="210" height="40" rx="6" fill="#1f2a3d" stroke="#ec4899" stroke-width="1"/>
+      <text x="630" y="172" text-anchor="middle" fill="#94a3b8" font-size="11" font-family="'Inter',sans-serif">+ MemoryService · FileService</text>
+      <text x="630" y="188" text-anchor="middle" fill="#94a3b8" font-size="11" font-family="'Inter',sans-serif">+ MCP integration · Agents</text>
+
+      <!-- Arrow -->
+      <text x="245" y="105" text-anchor="middle" fill="#64748b" font-size="16" font-family="'Inter',sans-serif">→</text>
+      <text x="505" y="105" text-anchor="middle" fill="#64748b" font-size="16" font-family="'Inter',sans-serif">→</text>
+    </svg>
+
+    <div class="reveal" style="flex-shrink:0">
+      <div class="grid grid-3" style="grid-template-columns:1fr 1fr 1fr">
+        <div class="card" style="border-color:#4a9eff">
+          <span class="tag tag-blue" style="align-self:flex-start">Phase 1</span>
+          <p style="font-size:var(--small-size);color:var(--fg2);margin-top:0.25rem">ChatService owns the streaming loop and all 3 deps. No refactoring needed for Phase 2.</p>
+        </div>
+        <div class="card" style="border-color:#fb923c">
+          <span class="tag tag-orange" style="align-self:flex-start">Phase 2</span>
+          <p style="font-size:var(--small-size);color:var(--fg2);margin-top:0.25rem">ToolService added as a 4th dep. ChatService routes tool calls through it. No structural refactor.</p>
+        </div>
+        <div class="card" style="border-color:#ec4899">
+          <span class="tag tag-pink" style="align-self:flex-start">Phase 3</span>
+          <p style="font-size:var(--small-size);color:var(--fg2);margin-top:0.25rem">ChatService grows large. Extract into Orchestrator with specialized sub-services. Natural threshold.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-number">11 / 13</div>
+</section>
+
+<!-- ===== SLIDE 12: EXTENSION HOOKS ===== -->
+<section class="slide" data-index="11">
+  <div class="slide-content">
+    <div class="reveal">
+      <div class="badge-row"><span class="tag tag-blue">DESIGN</span></div>
+      <h2>Extension Hooks for Phase 2</h2>
+      <p>ChatService is designed to accept extensions without changing its core loop.</p>
+    </div>
+
+    <div class="reveal">
+      <div class="code-block" style="font-size:clamp(0.6rem,0.95vw,0.85rem);max-width:700px;margin:0 auto">
+        <span class="kw">class</span> <span class="ty">ChatService</span>:<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">def</span> <span class="fn">__init__</span>(<span class="kw">self</span>,<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;sessions: <span class="ty">SessionService</span>,<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;models: <span class="ty">ModelService</span>,<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;config: <span class="ty">ConfigStore</span>,<br>
+        <span style="color:var(--orange)">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;tools: <span class="ty">ToolService</span> | <span class="kw">None</span> = <span class="kw">None</span>,    <span class="cm"># ← Phase 2: optional</span></span><br>
+        &nbsp;&nbsp;&nbsp;&nbsp;):<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;...<br><br>
+        &nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">async def</span> <span class="fn">_tool_loop</span>(<span class="kw">self</span>, messages):  <span class="cm"># ← Phase 2: added method</span><br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">if not</span> <span class="kw">self</span>._tools:<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">return</span> messages<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="cm"># Execute tool calls, collect results, re-invoke</span>
+      </div>
+    </div>
+
+    <div class="reveal" style="flex-shrink:0">
+      <div class="grid grid-2" style="grid-template-columns:1fr 1fr">
+        <div class="card" style="border-color:var(--green)">
+          <p style="font-size:var(--small-size);color:var(--fg2)"><strong style="color:var(--green)">Optional deps.</strong> New services are <code>None</code> by default. Existing consumers don't change.</p>
+        </div>
+        <div class="card" style="border-color:var(--accent)">
+          <p style="font-size:var(--small-size);color:var(--fg2)"><strong style="color:var(--accent)">New methods, not new parameters.</strong> Tool loop is a private method called from within <code>stream()</code>.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-number">12 / 13</div>
+</section>
+
+<!-- ===== SLIDE 13: SUMMARY ===== -->
+<section class="slide" data-index="12">
+  <div class="slide-content">
+    <div class="reveal" style="text-align:center;align-items:center">
+      <span class="tag tag-blue" style="font-size:var(--small-size)">SUMMARY</span>
+      <h2 style="margin-top:clamp(0.5rem,1vw,1rem)">Phase 1 Design Decisions</h2>
+    </div>
+
+    <div class="reveal" style="max-width:700px;margin:0 auto;width:100%">
+      <div style="display:flex;flex-direction:column;gap:clamp(0.5rem,1vw,1rem)">
+        <div style="display:flex;gap:clamp(0.5rem,1vw,1rem);align-items:flex-start">
+          <span class="tag tag-blue" style="flex-shrink:0;margin-top:0.15rem">1</span>
+          <div>
+            <p style="color:var(--fg);font-weight:600">ChatService as coordinator</p>
+            <p style="font-size:var(--small-size);color:var(--fg3)">Single service with 3 protocol deps. Extracts to Orchestrator when scope demands it.</p>
+          </div>
+        </div>
+        <div style="display:flex;gap:clamp(0.5rem,1vw,1rem);align-items:flex-start">
+          <span class="tag tag-green" style="flex-shrink:0;margin-top:0.15rem">2</span>
+          <div>
+            <p style="color:var(--fg);font-weight:600">Protocol-based persistence</p>
+            <p style="font-size:var(--small-size);color:var(--fg3)">SessionStore / ConfigStore as protocols. Swap JSON for SQLite later by writing a new implementation.</p>
+          </div>
+        </div>
+        <div style="display:flex;gap:clamp(0.5rem,1vw,1rem);align-items:flex-start">
+          <span class="tag tag-orange" style="flex-shrink:0;margin-top:0.15rem">3</span>
+          <div>
+            <p style="color:var(--fg);font-weight:600">Event-based streaming</p>
+            <p style="font-size:var(--small-size);color:var(--fg3)"><code>stream()</code> yields <code>Event</code> types using existing event model. WebSocket-ready from day one.</p>
+          </div>
+        </div>
+        <div style="display:flex;gap:clamp(0.5rem,1vw,1rem);align-items:flex-start">
+          <span class="tag tag-pink" style="flex-shrink:0;margin-top:0.15rem">4</span>
+          <div>
+            <p style="color:var(--fg);font-weight:600">Optional extension hooks</p>
+            <p style="font-size:var(--small-size);color:var(--fg3)">ToolService and future services slot in as optional constructor deps. Core signature stays stable.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="reveal" style="flex-shrink:0;text-align:center;margin-top:auto;padding-top:clamp(0.5rem,1vw,1rem)">
+      <p style="font-size:var(--body-size);color:var(--fg3)">
+        Services layer is the core. Everything else is a consumer.
+      </p>
+    </div>
+  </div>
+  <div class="slide-number">13 / 13</div>
+</section>
+
+<!-- Navigation -->
+<div class="dot-row" id="dots"></div>
+
+<script>
+const slides = document.querySelectorAll('.slide');
+const total = slides.length;
+const dots = document.getElementById('dots');
+
+function createDots() {
+  for (let i = 0; i < total; i++) {
+    const dot = document.createElement('button');
+    dot.className = 'dot' + (i === 0 ? ' active' : '');
+    dot.setAttribute('aria-label', `Slide ${i + 1}`);
+    dot.addEventListener('click', () => goTo(i));
+    dots.appendChild(dot);
+  }
+}
+
+function updateDots(index) {
+  document.querySelectorAll('.dot').forEach((d, i) => {
+    d.classList.toggle('active', i === index);
+  });
+}
+
+function goTo(index) {
+  if (index < 0 || index >= total) return;
+  slides[index].scrollIntoView({ behavior: 'smooth' });
+  updateDots(index);
+}
+
+function revealVisible() {
+  const reveals = document.querySelectorAll('.reveal');
+  reveals.forEach(el => {
+    const rect = el.getBoundingClientRect();
+    const slide = el.closest('.slide');
+    if (slide) {
+      const sr = slide.getBoundingClientRect();
+      if (rect.top < sr.bottom - 100 && rect.bottom > sr.top + 100) {
+        el.classList.add('visible');
+      }
+    }
+  });
+}
+
+document.addEventListener('keydown', e => {
+  const active = document.querySelector('.dot.active');
+  const idx = Array.from(document.querySelectorAll('.dot')).indexOf(active);
+  if (e.key === 'ArrowDown' || e.key === 'ArrowRight') goTo(idx + 1);
+  if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') goTo(idx - 1);
+});
+
+const observer = new IntersectionObserver(revealVisible, { threshold: 0.1 });
+slides.forEach(s => observer.observe(s));
+
+createDots();
+revealVisible();
+</script>
+
+</body>
+</html>

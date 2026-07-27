@@ -1,6 +1,6 @@
 """Provider registry — attempts to initialize all known providers."""
 
-from yapa.config import Config, get_config
+from yapa.services.config import Config
 
 from .base import InferenceProvider
 
@@ -37,7 +37,7 @@ class ProviderRegistry:
         self._available: dict[str, InferenceProvider] = {}
         self._failures: dict[str, str] = {}
 
-        cfg = config or get_config()
+        cfg = config or Config()
         for cls in provider_classes:
             try:
                 instance = cls(config=cfg)  # type: ignore

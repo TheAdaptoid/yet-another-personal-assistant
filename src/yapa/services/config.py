@@ -2,15 +2,12 @@
 
 import json
 import os
+import warnings
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
-
-from yapa.logging import get_logger
-
-logger = get_logger(__name__)
 
 DEFAULT_DATA_DIR = Path.home() / ".yapa"
 DEFAULT_CONFIG_PATH = DEFAULT_DATA_DIR / "config.json"
@@ -77,7 +74,7 @@ class JsonConfigStore:
                     try:
                         config_data[key] = int(value)
                     except ValueError:
-                        logger.warning(f"Invalid integer for {key}: {value}")
+                        warnings.warn(f"Invalid integer for {key}: {value}")
                 else:
                     config_data[key] = value
 
