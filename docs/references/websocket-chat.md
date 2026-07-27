@@ -122,6 +122,10 @@ usage.
 The server sends this event when an error occurs during generation. The
 connection stays open so you can send another prompt if needed.
 
+When an error occurs, the partial response received so far is discarded.
+The session is not updated. Send the prompt again to retry from the
+last saved state.
+
 ```
 {
   "type": "agent_error",

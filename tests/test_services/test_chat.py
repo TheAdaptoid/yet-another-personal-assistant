@@ -296,6 +296,33 @@ class TestStream:
         loaded = sessions.get(str(session.id))
         assert len(loaded.messages) == 4  # 2 user + 2 assistant
 
+    async def test_agent_error_on_empty_response(self, chat, sessions, models):
+        session = sessions.create()
+        provider = models.get_provider_by_model.return_value
+
+        async def _stream(model, messages, tools=None, params=None):
+            yield StreamDelta()
+
+        provider.stream_chat.side_effect = _stream
+        model = ModelData(id="gpt-4", provider_id="openai", type=ModelType.LLM)
+
+        events = []
+        async for event in chat.stream(
+            session_id=session.id,
+            prompt="Hi",
+            model=model,
+        ):
+            events.append(event)
+
+        assert len(events) == 2
+        assert isinstance(events[0], AgentStartEvent)
+        assert isinstance(events[1], AgentErrorEvent)
+        assert "empty response" in events[1].message
+
+        # No messages should be persisted
+        loaded = sessions.get(str(session.id))
+        assert len(loaded.messages) == 0
+
     async def test_raises_on_missing_session(self, chat, models):
         with pytest.raises(ValueError, match="not found"):
             async for _ in chat.stream(

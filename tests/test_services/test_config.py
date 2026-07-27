@@ -111,3 +111,37 @@ class TestJsonConfigStore:
         cfg2 = store.load()
         # Should re-read from disk
         assert cfg2.log_level == "DEBUG"
+
+    def test_env_override_storage_dir(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("YAPA_STORAGE_DIR", "/tmp/yapa-storage")
+        store = JsonConfigStore(path=tmp_path / "config.json")
+        cfg = store.load()
+        assert cfg.storage_dir == Path("/tmp/yapa-storage")
+
+    def test_env_override_provider_timeout(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("YAPA_PROVIDER_TIMEOUT", "30")
+        store = JsonConfigStore(path=tmp_path / "config.json")
+        cfg = store.load()
+        assert cfg.provider_timeout == 30
+
+    def test_env_override_provider_max_retries(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("YAPA_PROVIDER_MAX_RETRIES", "5")
+        store = JsonConfigStore(path=tmp_path / "config.json")
+        cfg = store.load()
+        assert cfg.provider_max_retries == 5
+
+    def test_env_override_api_prefix(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("YAPA_API_PREFIX", "/api/v2")
+        store = JsonConfigStore(path=tmp_path / "config.json")
+        cfg = store.load()
+        assert cfg.api_prefix == "/api/v2"
+
+    def test_env_override_invalid_int_falls_back_to_file_value(
+        self, tmp_path, monkeypatch
+    ):
+        config_path = tmp_path / "config.json"
+        config_path.write_text(json.dumps({"provider_timeout": 60}))
+        monkeypatch.setenv("YAPA_PROVIDER_TIMEOUT", "abc")
+        store = JsonConfigStore(path=config_path)
+        cfg = store.load()
+        assert cfg.provider_timeout == 60

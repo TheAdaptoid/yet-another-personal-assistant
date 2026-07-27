@@ -6,6 +6,7 @@ from yapa.providers import (
     DEFAULT_PROVIDER_CLASSES,
     InferenceProvider,
     ModelsFetchError,
+    ProviderNotAvailableError,
     ProviderRegistry,
 )
 
@@ -21,11 +22,16 @@ class ModelService:
 
     def get_provider(self, provider_id: str) -> InferenceProvider:
         """Get a provider by ID."""
-        return self._registry.get(provider_id)
+        try:
+            return self._registry.get(provider_id)
+        except ProviderNotAvailableError as e:
+            raise ModelsFetchError(
+                f"Provider '{provider_id}' is not available: {e}"
+            ) from e
 
     def get_provider_by_model(self, model: ModelData) -> InferenceProvider:
         """Get the provider that serves the given model."""
-        return self._registry.get(model.provider_id)
+        return self.get_provider(model.provider_id)
 
     async def list_models(
         self,
@@ -34,8 +40,8 @@ class ModelService:
     ) -> list[ModelData]:
         """Fetch models from one or all providers, returning a flat list."""
         if provider_id:
-            provider = self.get_provider(provider_id)
             try:
+                provider = self.get_provider(provider_id)
                 return await provider.list_models(model_type)
             except ModelsFetchError as e:
                 logger.error(f"Failed to fetch models for '{provider_id}': {e}")
@@ -59,8 +65,8 @@ class ModelService:
                 f"Invalid model full ID '{model_full_id}': "
                 "expected 'provider_id:model_id'"
             )
-        provider = self.get_provider(provider_id)
         try:
+            provider = self.get_provider(provider_id)
             return await provider.get_model(model_id=model_id)
         except ModelsFetchError as e:
             logger.error(f"Failed to fetch model '{model_full_id}': {e}")

@@ -3,8 +3,10 @@
 from unittest.mock import AsyncMock
 
 import pytest
+from fastapi.testclient import TestClient
 
 from yapa.models import ModelData, ModelType
+from yapa.providers.registry import ProviderNotAvailableError
 
 
 @pytest.fixture
@@ -104,3 +106,22 @@ def test_get_model_invalid_format(client):
     )
     response = client.get("/api/v1/models/bad-format")
     assert response.status_code == 404
+
+
+def test_get_model_provider_not_available(client):
+    client.app.state.model_service.get_model = AsyncMock(
+        side_effect=ProviderNotAvailableError("Provider 'unknown' not found")
+    )
+    response = client.get("/api/v1/models/unknown:gpt-4")
+    assert response.status_code == 404
+    assert "not found" in response.json()["detail"]
+
+
+def test_unhandled_exception_returns_500(client, app):
+    quiet_client = TestClient(app, raise_server_exceptions=False)
+    quiet_client.app.state.model_service.list_models = AsyncMock(
+        side_effect=RuntimeError("unexpected")
+    )
+    response = quiet_client.get("/api/v1/models")
+    assert response.status_code == 500
+    assert response.json() == {"detail": "Internal server error"}

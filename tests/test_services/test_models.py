@@ -7,6 +7,7 @@ import pytest
 from yapa.models import ModelData, ModelType
 from yapa.providers.base import InferenceProvider
 from yapa.providers.exceptions import ModelsFetchError
+from yapa.providers.registry import ProviderNotAvailableError
 from yapa.services.models import ModelService
 
 
@@ -34,6 +35,13 @@ class TestGetProvider:
         svc = ModelService(registry=registry)
         svc.get_provider("openai")
         registry.get.assert_called_once_with("openai")
+
+    def test_raises_models_fetch_error_on_unknown(self):
+        registry = MagicMock()
+        registry.get.side_effect = ProviderNotAvailableError("not found")
+        svc = ModelService(registry=registry)
+        with pytest.raises(ModelsFetchError, match="not found"):
+            svc.get_provider("unknown")
 
 
 class TestGetProviderByModel:
@@ -107,6 +115,13 @@ class TestListModels:
         for m in result:
             assert m.provider_id in ("prov_a", "prov_b")
 
+    async def test_returns_empty_on_unknown_specific_provider(self, _mock_logger):
+        registry = MagicMock()
+        registry.get.side_effect = ProviderNotAvailableError("not found")
+        svc = ModelService(registry=registry)
+        result = await svc.list_models(provider_id="unknown")
+        assert result == []
+
 
 class TestGetModel:
     @pytest.fixture
@@ -130,3 +145,10 @@ class TestGetModel:
     async def test_raises_on_malformed_id(self, svc):
         with pytest.raises(ValueError, match="expected 'provider_id:model_id'"):
             await svc.get_model("no-colon")
+
+    async def test_raises_value_error_on_unknown_provider(self):
+        registry = MagicMock()
+        registry.get.side_effect = ProviderNotAvailableError("not found")
+        svc = ModelService(registry=registry)
+        with pytest.raises(ValueError, match="unknown"):
+            await svc.get_model("unknown:gpt-4")
