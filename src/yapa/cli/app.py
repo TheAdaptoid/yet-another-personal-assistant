@@ -183,10 +183,19 @@ def models(
     provider: str | None = typer.Option(
         None, "--provider", "-p", help="Filter by provider ID"
     ),
+    model_type: str | None = typer.Option(
+        None, "--model-type", "-t", help="Filter by model type (llm or embedding)"
+    ),
 ):
     """List available models."""
+    from yapa.models import ModelType
+    model_type_enum = ModelType(model_type) if model_type else None
+    
     service = ModelService()
-    results = asyncio.run(service.list_models(provider_id=provider))
+    results = asyncio.run(service.list_models(
+        provider_id=provider,
+        model_type=model_type_enum
+    ))
 
     if not results:
         if provider:
