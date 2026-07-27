@@ -2,6 +2,7 @@
 
 from yapa.models import (
     AssistantMessage,
+    InferenceParams,
     ModelData,
     ModelType,
     Session,
@@ -75,9 +76,6 @@ class TestModelField:
         assert isinstance(data["model"], dict)
         assert data["model"]["id"] == "claude-3"
         assert data["model"]["provider_id"] == "anthropic"
-
-
-from yapa.models import InferenceParams
 
 
 class TestSessionNewFields:

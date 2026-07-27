@@ -16,12 +16,15 @@ class ModelService:
     """Thin wrapper around ProviderRegistry for model fetching."""
 
     def __init__(self, registry: ProviderRegistry | None = None) -> None:
+        """Initialize the model service."""
         self._registry = registry or ProviderRegistry(DEFAULT_PROVIDER_CLASSES)
 
     def get_provider(self, provider_id: str) -> InferenceProvider:
+        """Get a provider by ID."""
         return self._registry.get(provider_id)
 
     def get_provider_by_model(self, model: ModelData) -> InferenceProvider:
+        """Get the provider that serves the given model."""
         return self._registry.get(model.provider_id)
 
     async def list_models(

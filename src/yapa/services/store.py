@@ -11,29 +11,41 @@ from yapa.storage import GenericStore
 class SessionStore(Protocol):
     """Protocol for session persistence."""
 
-    def load(self, id: str) -> Session: ...
-    def save(self, session: Session, *, overwrite: bool = False) -> None: ...
-    def list(self) -> list[Session]: ...
-    def delete(self, id: str) -> None: ...
+    def load(self, id: str) -> Session:
+        """Load a session by ID."""
+
+    def save(self, session: Session, *, overwrite: bool = False) -> None:
+        """Save a session."""
+
+    def list(self) -> list[Session]:
+        """List all sessions."""
+
+    def delete(self, id: str) -> None:
+        """Delete a session by ID."""
 
 
 class JsonSessionStore:
     """JSON-file-backed session store wrapping GenericStore."""
 
     def __init__(self, storage_dir: Path) -> None:
+        """Initialize the JSON session store."""
         self._store = GenericStore[Session](
             storage_dir=Path(storage_dir),
             entity_type=Session,
         )
 
     def load(self, id: str) -> Session:
+        """Load a session by ID."""
         return self._store.load(id)
 
     def save(self, session: Session, *, overwrite: bool = False) -> None:
+        """Save a session."""
         self._store.save(session, overwrite=overwrite)
 
     def list(self) -> list[Session]:
+        """List all sessions."""
         return self._store.list()
 
     def delete(self, id: str) -> None:
+        """Delete a session by ID."""
         self._store.delete(id)

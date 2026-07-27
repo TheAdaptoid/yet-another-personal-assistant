@@ -14,6 +14,7 @@ class LMStudioIP(OpenAICompatibleProvider):
     DEFAULT_BASE_URL = "http://localhost:1234/v1"
 
     def __init__(self, config: Config):
+        """Initialize the LM Studio provider."""
         pc = config.provider_configs.get("lmstudio", ProviderConfig())
         super().__init__(
             identifier="lmstudio",

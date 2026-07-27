@@ -6,9 +6,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from yapa.services.config import Config, ProviderConfig
 from yapa.models import ModelData, ModelType
 from yapa.models.message import UserMessage
+from yapa.services.config import Config, ProviderConfig
 
 
 @pytest.fixture(autouse=True)

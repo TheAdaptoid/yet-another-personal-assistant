@@ -16,7 +16,6 @@ from openai.types.chat import (
     ChatCompletionUserMessageParam,
 )
 
-from yapa.services.config import DEFAULT_PROVIDER_TIMEOUT
 from yapa.models import (
     AssistantMessage,
     InferenceParams,
@@ -29,6 +28,7 @@ from yapa.models import (
     ToolCallDelta,
     ToolMessage,
 )
+from yapa.services.config import DEFAULT_PROVIDER_TIMEOUT
 from yapa.tools import Tool
 
 from .base import InferenceProvider

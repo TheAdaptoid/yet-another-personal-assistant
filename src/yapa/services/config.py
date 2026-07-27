@@ -44,21 +44,23 @@ class Config(BaseModel):
 class ConfigStore(Protocol):
     """Protocol for config persistence."""
 
-    def load(self) -> Config: ...
-    def save(self, config: Config) -> None: ...
+    def load(self) -> Config:
+        """Load config from storage."""
+
+    def save(self, config: Config) -> None:
+        """Save config to storage."""
 
 
 class JsonConfigStore:
     """JSON-file-backed config store with env variable overrides."""
 
     def __init__(self, path: Path | None = None) -> None:
+        """Initialize the JSON config store."""
         self._path = path or DEFAULT_CONFIG_PATH
         self._cache: Config | None = None
 
     def load(self) -> Config:
-        """Read config file, apply env overrides, cache and return."""
-        if self._cache is not None:
-            return self._cache
+        """Read config file, apply env overrides, and return."""
         load_dotenv()
         config_data: dict[str, Any] = {}
         if self._path.exists():

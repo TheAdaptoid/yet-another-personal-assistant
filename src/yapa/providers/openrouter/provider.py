@@ -14,6 +14,7 @@ class OpenRouterProvider(OpenAICompatibleProvider):
     DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
 
     def __init__(self, config: Config):
+        """Initialize the OpenRouter provider."""
         pc = config.provider_configs.get("openrouter", ProviderConfig())
         if pc.api_key is None:
             raise ValueError("OpenRouter API key is not set.")

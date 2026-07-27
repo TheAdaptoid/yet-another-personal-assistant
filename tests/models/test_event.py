@@ -1,6 +1,6 @@
 """Tests for Phase 1 event model."""
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 import pytest
 

@@ -1,6 +1,5 @@
 """Tests for SessionStore protocol and JsonSessionStore."""
 
-from uuid import uuid4
 
 import pytest
 

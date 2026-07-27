@@ -11,6 +11,7 @@ class OllamaIP(OpenAICompatibleProvider):
     DEFAULT_BASE_URL = "http://localhost:11434/v1"
 
     def __init__(self, config: Config):
+        """Initialize the Ollama provider."""
         pc = config.provider_configs.get("ollama", ProviderConfig())
         super().__init__(
             identifier="ollama",

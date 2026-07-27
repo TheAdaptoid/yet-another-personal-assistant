@@ -1,6 +1,6 @@
 """Tests for ChatService."""
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
@@ -10,16 +10,10 @@ from yapa.models import (
     InferenceParams,
     ModelData,
     ModelType,
-    Session,
     StreamDelta,
     TokenUsage,
     UserMessage,
 )
-from yapa.services.chat import ChatService
-from yapa.services.exceptions import ChatError
-from yapa.services.session import SessionService
-from yapa.services.models import ModelService
-from yapa.services.store import JsonSessionStore
 from yapa.models.event import (
     AgentDoneEvent,
     AgentErrorEvent,
@@ -27,6 +21,10 @@ from yapa.models.event import (
     ReasoningEvent,
     TextEvent,
 )
+from yapa.services.chat import ChatService
+from yapa.services.models import ModelService
+from yapa.services.session import SessionService
+from yapa.services.store import JsonSessionStore
 
 
 @pytest.fixture

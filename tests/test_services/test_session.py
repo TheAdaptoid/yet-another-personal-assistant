@@ -1,10 +1,15 @@
 """Tests for SessionService."""
 
-from uuid import uuid4
 
 import pytest
 
-from yapa.models import AssistantMessage, InferenceParams, ModelData, ModelType, UserMessage
+from yapa.models import (
+    AssistantMessage,
+    InferenceParams,
+    ModelData,
+    ModelType,
+    UserMessage,
+)
 from yapa.services.session import SessionService
 from yapa.services.store import JsonSessionStore
 
@@ -38,8 +43,8 @@ class TestList:
     def test_returns_all_sessions(self, tmp_path):
         store = JsonSessionStore(storage_dir=tmp_path)
         service = SessionService(store=store)
-        s1 = service.create()
-        s2 = service.create()
+        service.create()
+        service.create()
         sessions = service.list()
         assert len(sessions) == 2
 

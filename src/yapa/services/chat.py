@@ -8,7 +8,6 @@ from yapa.models import (
     InferenceParams,
     Message,
     ModelData,
-    StreamDelta,
     SystemMessage,
     UserMessage,
 )
@@ -20,7 +19,6 @@ from yapa.models.event import (
     ReasoningEvent,
     TextEvent,
 )
-from yapa.services.exceptions import ChatError
 from yapa.services.models import ModelService
 from yapa.services.session import SessionService
 
@@ -34,6 +32,7 @@ class ChatService:
         sessions: SessionService,
         models: ModelService,
     ) -> None:
+        """Initialize the chat service."""
         self._sessions = sessions
         self._models = models
 

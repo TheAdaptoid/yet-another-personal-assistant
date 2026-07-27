@@ -3,12 +3,8 @@
 import json
 from pathlib import Path
 
-import pytest
-
 from yapa.services.config import (
-    DEFAULT_CONFIG_PATH,
     Config,
-    ConfigStore,
     JsonConfigStore,
     ProviderConfig,
 )
@@ -106,12 +102,12 @@ class TestJsonConfigStore:
         cfg = store.load()
         assert cfg.log_level == "INFO"
 
-    def test_caches_after_load(self, tmp_path):
+    def test_reloads_from_disk(self, tmp_path):
         config_path = tmp_path / "config.json"
         store = JsonConfigStore(path=config_path)
-        cfg1 = store.load()
+        _ = store.load()
         # Modify file behind the scenes
         config_path.write_text(json.dumps({"log_level": "DEBUG"}))
         cfg2 = store.load()
-        # Should read from cache, not disk — still has defaults
-        assert cfg2.log_level == "INFO"
+        # Should re-read from disk
+        assert cfg2.log_level == "DEBUG"

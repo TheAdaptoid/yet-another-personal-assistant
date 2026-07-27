@@ -39,7 +39,9 @@ def get_logger(
     logger.setLevel(log_level)
     logger.handlers.clear()
 
-    log_dir = DEFAULT_DATA_DIR / "logs" / datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    log_dir = DEFAULT_DATA_DIR / "logs" / datetime.now(timezone.utc).strftime(
+        "%Y-%m-%d"
+    )
     log_dir.mkdir(parents=True, exist_ok=True)
 
     log_file = log_dir / f"{name}.log"

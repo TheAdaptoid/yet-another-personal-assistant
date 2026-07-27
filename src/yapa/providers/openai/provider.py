@@ -65,6 +65,7 @@ class OpenAIIP(OpenAICompatibleProvider):
     DEFAULT_BASE_URL = "https://api.openai.com/v1"
 
     def __init__(self, config: Config):
+        """Initialize the OpenAI provider."""
         pc = config.provider_configs.get("openai", ProviderConfig())
         if pc.api_key is None:
             raise ValueError("OpenAI API key is not set.")

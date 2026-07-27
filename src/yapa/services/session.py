@@ -1,6 +1,6 @@
 """Session management service — CRUD and message appending."""
 
-from __future__ import annotations
+from typing import List
 
 from yapa.models import InferenceParams, Message, ModelData, Session
 from yapa.services.store import SessionStore
@@ -10,6 +10,7 @@ class SessionService:
     """CRUD for sessions + message appending."""
 
     def __init__(self, store: SessionStore) -> None:
+        """Initialize the session service."""
         self._store = store
 
     def create(self) -> Session:
@@ -18,7 +19,7 @@ class SessionService:
         self._store.save(session)
         return session
 
-    def list(self, *, newest_first: bool = True) -> list[Session]:
+    def list(self, *, newest_first: bool = True) -> List[Session]:
         """List all sessions, newest first by default."""
         sessions = self._store.list()
         sessions.sort(key=lambda s: s.updated_at, reverse=newest_first)
@@ -66,7 +67,7 @@ class SessionService:
     def add_messages(
         self,
         session_id: str,
-        messages: list[Message],
+        messages: List[Message],
         model: ModelData | None = None,
     ) -> Session:
         """Append messages to a session, optionally update model, and persist."""
