@@ -25,6 +25,7 @@ from yapa.services.chat import ChatService
 from yapa.services.models import ModelService
 from yapa.services.session import SessionService
 from yapa.services.store import JsonSessionStore
+from yapa.tools.registry import ToolRegistry
 
 
 @pytest.fixture
@@ -45,7 +46,7 @@ def sessions(tmp_path):
 
 @pytest.fixture
 def chat(models, sessions):
-    return ChatService(sessions=sessions, models=models)
+    return ChatService(sessions=sessions, models=models, tools=ToolRegistry())
 
 
 class TestStream:
