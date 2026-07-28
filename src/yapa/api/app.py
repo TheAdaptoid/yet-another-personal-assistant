@@ -10,6 +10,8 @@ from yapa.services import ChatService, ModelService, SessionService
 from yapa.services.config import Config, JsonConfigStore
 from yapa.services.exceptions import ChatError
 from yapa.services.store import JsonSessionStore
+from yapa.tools import ToolRegistry
+from yapa.tools.core import default_tools
 
 from .routes import health, models, sessions
 from .websocket import chat as chat_ws
@@ -19,23 +21,31 @@ def _build_services(config: Config):
     store = JsonSessionStore(config.storage_dir)
     session_service = SessionService(store)
     model_service = ModelService()
+    tool_registry = ToolRegistry(default_tools())
     chat_service = ChatService(
         sessions=session_service,
         models=model_service,
+        tools=tool_registry,
     )
-    return session_service, model_service, chat_service
+    return session_service, model_service, chat_service, tool_registry
 
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     if not all(
         hasattr(app.state, name)
-        for name in ("session_service", "model_service", "chat_service")
+        for name in (
+            "session_service",
+            "model_service",
+            "chat_service",
+            "tool_registry",
+        )
     ):
         (
             app.state.session_service,
             app.state.model_service,
             app.state.chat_service,
+            app.state.tool_registry,
         ) = _build_services(app.state.config)
 
     yield

@@ -1,11 +1,15 @@
 """Phase 1 event types for the agent-service event system."""
 
+from __future__ import annotations
+
 from datetime import datetime, timezone
 from enum import Enum
+from typing import Any
 
 from pydantic import BaseModel, Field
 
 from yapa.models.inference import TokenUsage
+from yapa.tools.base import JsonValue
 
 
 class EventType(str, Enum):
@@ -16,6 +20,9 @@ class EventType(str, Enum):
     AGENT_START = "agent_start"
     AGENT_DONE = "agent_done"
     AGENT_ERROR = "agent_error"
+    TOOL_CALL = "tool_call"
+    TOOL_APPROVAL_REQUEST = "tool_approval_request"
+    TOOL_RESULT = "tool_result"
 
 
 class EventSource(str, Enum):
@@ -74,3 +81,33 @@ class AgentErrorEvent(Event):
     type: EventType = EventType.AGENT_ERROR
     source: EventSource = EventSource.AGENT
     message: str
+
+
+class ToolCallEvent(Event):
+    """Emitted when the model requests a tool call."""
+
+    type: EventType = EventType.TOOL_CALL
+    source: EventSource = EventSource.AGENT
+    tool_name: str
+    arguments: dict[str, Any]
+    call_id: str
+
+
+class ToolApprovalRequestEvent(Event):
+    """Emitted before executing a tool that requires approval."""
+
+    type: EventType = EventType.TOOL_APPROVAL_REQUEST
+    source: EventSource = EventSource.SYSTEM
+    tool_name: str
+    arguments: dict[str, Any]
+    call_id: str
+
+
+class ToolResultEvent(Event):
+    """Emitted after a tool has been executed."""
+
+    type: EventType = EventType.TOOL_RESULT
+    source: EventSource = EventSource.SYSTEM
+    tool_name: str
+    call_id: str
+    result: JsonValue

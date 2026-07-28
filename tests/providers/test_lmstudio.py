@@ -96,36 +96,26 @@ class TestNativeModelList:
         assert llama.context_length is None
         assert llama.supports_tools is False
 
-    async def test_detects_embed_model(
-        self, lmstudio_provider, mock_httpx_get
-    ):
+    async def test_detects_embed_model(self, lmstudio_provider, mock_httpx_get):
         models = await lmstudio_provider._list_models_impl()
         embed = models[2]
         assert embed.id == "text-embedding-3"
         assert embed.type == ModelType.OTHER
         assert embed.context_length == 8192
 
-    async def test_filters_by_model_type(
-        self, lmstudio_provider, mock_httpx_get
-    ):
-        llms = await lmstudio_provider._list_models_impl(
-            model_type=ModelType.LLM
-        )
+    async def test_filters_by_model_type(self, lmstudio_provider, mock_httpx_get):
+        llms = await lmstudio_provider._list_models_impl(model_type=ModelType.LLM)
         assert len(llms) == 2
         assert all(m.type == ModelType.LLM for m in llms)
 
     async def test_get_model_impl_returns_from_list(
         self, lmstudio_provider, mock_httpx_get
     ):
-        model = await lmstudio_provider._get_model_impl(
-            "qwen/qwen3-4b@q4_k_m"
-        )
+        model = await lmstudio_provider._get_model_impl("qwen/qwen3-4b@q4_k_m")
         assert model.id == "qwen/qwen3-4b@q4_k_m"
         assert model.context_length == 32768
 
-    async def test_get_model_impl_falls_back(
-        self, lmstudio_provider, mock_httpx_get
-    ):
+    async def test_get_model_impl_falls_back(self, lmstudio_provider, mock_httpx_get):
         model = await lmstudio_provider._get_model_impl("unknown-model")
         assert model.id == "unknown-model"
         assert model.context_length is None

@@ -94,9 +94,7 @@ class TestListModels:
         registry = MagicMock()
         provider_a = MagicMock(spec=InferenceProvider)
         provider_a.id = "prov_a"
-        provider_a.list_models = AsyncMock(
-            side_effect=ModelsFetchError("API down")
-        )
+        provider_a.list_models = AsyncMock(side_effect=ModelsFetchError("API down"))
         provider_b = MagicMock(spec=InferenceProvider)
         provider_b.id = "prov_b"
         provider_b.list_models = AsyncMock(
@@ -130,9 +128,7 @@ class TestGetModel:
         provider = MagicMock(spec=InferenceProvider)
         provider.id = "prov_a"
         provider.get_model = AsyncMock(
-            return_value=ModelData(
-                id="gpt-4", provider_id="prov_a", type=ModelType.LLM
-            )
+            return_value=ModelData(id="gpt-4", provider_id="prov_a", type=ModelType.LLM)
         )
         registry.get.return_value = provider
         return ModelService(registry=registry)

@@ -3,7 +3,9 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
-type JsonSerializable = int | float | str | bool | None | list | dict
+type JsonValue = (
+    int | float | str | bool | None | list["JsonValue"] | dict[str, "JsonValue"]
+)
 
 
 class Tool(ABC):
@@ -24,7 +26,7 @@ class Tool(ABC):
         self.needs_approval = needs_approval
 
     @abstractmethod
-    async def execute(self, **kwargs: Any) -> JsonSerializable:
+    async def execute(self, **kwargs: Any) -> JsonValue:
         """
         Execute the tool with the given arguments.
 
@@ -32,5 +34,5 @@ class Tool(ABC):
             **kwargs: Arbitrary keyword arguments to be passed to the tool.
 
         Returns:
-            JsonSerializable: The result of the tool execution.
+            JsonValue: The result of the tool execution.
         """

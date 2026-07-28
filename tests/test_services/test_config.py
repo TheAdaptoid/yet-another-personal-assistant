@@ -87,9 +87,12 @@ class TestJsonConfigStore:
     def test_roundtrip(self, tmp_path):
         config_path = tmp_path / "config.json"
         store = JsonConfigStore(path=config_path)
-        original = Config(log_level="WARNING", provider_configs={
-            "openai": ProviderConfig(api_key="sk-abc"),
-        })
+        original = Config(
+            log_level="WARNING",
+            provider_configs={
+                "openai": ProviderConfig(api_key="sk-abc"),
+            },
+        )
         store.save(original)
         loaded = store.load()
         assert loaded.log_level == "WARNING"

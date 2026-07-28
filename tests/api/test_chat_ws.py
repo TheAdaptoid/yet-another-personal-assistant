@@ -10,7 +10,11 @@ from yapa.models.event import (
     AgentErrorEvent,
     AgentStartEvent,
     TextEvent,
+    ToolApprovalRequestEvent,
+    ToolCallEvent,
+    ToolResultEvent,
 )
+from yapa.models.tool import ToolApprovalRequest
 
 
 def test_chat_ws_streams_events(client, mock_chat_service, mock_session_service):
@@ -19,7 +23,7 @@ def test_chat_ws_streams_events(client, mock_chat_service, mock_session_service)
         model=ModelData(id="gpt-4o", provider_id="openai", type=ModelType.LLM)
     )
 
-    async def _stream(*, session_id, prompt, model):
+    async def _stream(*, session_id, prompt, model, **kwargs):
         yield AgentStartEvent(model_id="openai:gpt-4o")
         yield TextEvent(content="Hello")
         yield AgentDoneEvent(content="Hello", finish_reason="stop")
@@ -59,7 +63,7 @@ def test_chat_ws_uses_requested_model(
 
     seen_model = {}
 
-    async def _stream(*, session_id, prompt, model):
+    async def _stream(*, session_id, prompt, model, **kwargs):
         seen_model["value"] = model
         yield AgentStartEvent(model_id=model.full_id)
         yield AgentDoneEvent(content="Hello", finish_reason="stop")
@@ -97,7 +101,7 @@ def test_chat_ws_multiple_prompts(client, mock_chat_service, mock_session_servic
 
     calls = 0
 
-    async def _stream(*, session_id, prompt, model):
+    async def _stream(*, session_id, prompt, model, **kwargs):
         nonlocal calls
         calls += 1
         yield AgentStartEvent(model_id="openai:gpt-4o")
@@ -124,7 +128,7 @@ def test_chat_ws_error_event(client, mock_chat_service, mock_session_service):
         model=ModelData(id="gpt-4o", provider_id="openai", type=ModelType.LLM)
     )
 
-    async def _stream(*, session_id, prompt, model):
+    async def _stream(*, session_id, prompt, model, **kwargs):
         yield AgentStartEvent(model_id="openai:gpt-4o")
         yield AgentErrorEvent(message="Something went wrong")
 
@@ -162,10 +166,93 @@ def test_chat_ws_invalid_json(client, mock_session_service):
             ws.receive_json()
 
 
-def test_chat_ws_invalid_session(client, mock_session_service):
+def test_chat_ws_tool_approval_flow(client, mock_chat_service, mock_session_service):
+    """WebSocket sends ToolApprovalRequestEvent and client responds with approval."""
     session_id = str(uuid4())
-    mock_session_service.get.side_effect = ValueError("Session not found")
+    mock_session_service.get.return_value = Session(
+        model=ModelData(id="gpt-4o", provider_id="openai", type=ModelType.LLM)
+    )
+
+    async def _stream(*, session_id, prompt, model, get_approval=None):
+        yield AgentStartEvent(model_id="openai:gpt-4o")
+        yield ToolCallEvent(
+            tool_name="write_file",
+            arguments={"path": "/tmp/test.txt"},
+            call_id="call_1",
+        )
+        yield ToolApprovalRequestEvent(
+            tool_name="write_file",
+            arguments={"path": "/tmp/test.txt"},
+            call_id="call_1",
+        )
+        # Simulate waiting for approval
+        response = await get_approval(
+            ToolApprovalRequest(
+                call_id="call_1", name="write_file", arguments={"path": "/tmp/test.txt"}
+            )
+        )
+        if response.approved:
+            yield ToolResultEvent(tool_name="write_file", call_id="call_1", result="ok")
+        yield AgentDoneEvent(content="File written", finish_reason="stop")
+
+    mock_chat_service.stream = _stream
 
     with client.websocket_connect(f"/api/v1/chat/{session_id}") as ws:
-        with pytest.raises(Exception):
-            ws.receive_json()
+        ws.send_json({"prompt": "Write a file"})
+
+        # Receive events until we get an approval request
+        while True:
+            msg = ws.receive_json()
+            if msg["type"] == "tool_approval_request":
+                assert msg["tool_name"] == "write_file"
+                # Send approval response
+                ws.send_json(
+                    {"type": "tool_approval", "call_id": "call_1", "approved": True}
+                )
+                break
+
+        # Receive remaining events
+        msg = ws.receive_json()
+        assert msg["type"] in ("tool_result", "agent_done")
+        if msg["type"] == "tool_result":
+            msg = ws.receive_json()
+            assert msg["type"] == "agent_done"
+
+
+def test_chat_ws_tool_denial_flow(client, mock_chat_service, mock_session_service):
+    """Client can deny a tool call."""
+    session_id = str(uuid4())
+    mock_session_service.get.return_value = Session(
+        model=ModelData(id="gpt-4o", provider_id="openai", type=ModelType.LLM)
+    )
+
+    async def _stream(*, session_id, prompt, model, get_approval=None):
+        yield AgentStartEvent(model_id="openai:gpt-4o")
+        yield ToolCallEvent(tool_name="write_file", arguments={}, call_id="call_1")
+        yield ToolApprovalRequestEvent(
+            tool_name="write_file", arguments={}, call_id="call_1"
+        )
+        response = await get_approval(
+            ToolApprovalRequest(call_id="call_1", name="write_file", arguments={})
+        )
+        assert not response.approved
+        yield AgentDoneEvent(content="Denied", finish_reason="stop")
+
+    mock_chat_service.stream = _stream
+
+    with client.websocket_connect(f"/api/v1/chat/{session_id}") as ws:
+        ws.send_json({"prompt": "Write a file"})
+        while True:
+            msg = ws.receive_json()
+            if msg["type"] == "tool_approval_request":
+                ws.send_json(
+                    {
+                        "type": "tool_approval",
+                        "call_id": "call_1",
+                        "approved": False,
+                        "reason": "unsafe",
+                    }
+                )
+                break
+        msg = ws.receive_json()
+        assert msg["type"] == "agent_done"

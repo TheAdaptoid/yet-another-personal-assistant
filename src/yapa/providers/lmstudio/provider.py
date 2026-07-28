@@ -28,7 +28,7 @@ class LMStudioIP(OpenAICompatibleProvider):
     def _native_base_url(self) -> str:
         base = str(self._client.base_url).rstrip("/")
         if base.endswith("/v1"):
-            base = base[: -3]
+            base = base[:-3]
         return base + "/api/v1"
 
     def _format_model_from_native(self, raw: dict) -> ModelData:

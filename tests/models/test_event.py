@@ -2,8 +2,6 @@
 
 from datetime import datetime
 
-import pytest
-
 from yapa.models.event import (
     AgentDoneEvent,
     AgentErrorEvent,
@@ -33,15 +31,10 @@ class TestEventType:
     def test_agent_error(self):
         assert EventType.AGENT_ERROR == "agent_error"
 
-    def test_tool_events_removed(self):
-        with pytest.raises(AttributeError):
-            EventType.TOOL_CALL
-        with pytest.raises(AttributeError):
-            EventType.TOOL_RESULT
-        with pytest.raises(AttributeError):
-            EventType.TOOL_APPROVAL_REQUEST
-        with pytest.raises(AttributeError):
-            EventType.TOOL_APPROVAL_RESPONSE
+    def test_tool_events_added(self):
+        assert EventType.TOOL_CALL == "tool_call"
+        assert EventType.TOOL_RESULT == "tool_result"
+        assert EventType.TOOL_APPROVAL_REQUEST == "tool_approval_request"
 
 
 class TestEventBase:
