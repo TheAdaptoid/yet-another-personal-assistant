@@ -31,10 +31,12 @@ class ChatService:
         *,
         sessions: SessionService,
         models: ModelService,
+        tools: object | None = None,
     ) -> None:
         """Initialize the chat service."""
         self._sessions = sessions
         self._models = models
+        self._tools = tools
 
     async def stream(
         self,
