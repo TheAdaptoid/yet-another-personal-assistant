@@ -3,7 +3,9 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
-type JsonValue = int | float | str | bool | None | list["JsonValue"] | dict[str, "JsonValue"]
+type JsonValue = (
+    int | float | str | bool | None | list["JsonValue"] | dict[str, "JsonValue"]
+)
 
 
 class Tool(ABC):
