@@ -9,6 +9,9 @@ from .event import (
     EventType,
     ReasoningEvent,
     TextEvent,
+    ToolApprovalRequestEvent,
+    ToolCallEvent,
+    ToolResultEvent,
 )
 from .inference import (
     InferenceParams,
@@ -61,4 +64,7 @@ __all__ = [
     "AgentStartEvent",
     "AgentDoneEvent",
     "AgentErrorEvent",
+    "ToolCallEvent",
+    "ToolApprovalRequestEvent",
+    "ToolResultEvent",
 ]
