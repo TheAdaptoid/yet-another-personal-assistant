@@ -3,6 +3,9 @@ from pathlib import Path
 from yapa.tools.core.read_file import read_file
 from yapa.tools.core.grep import grep
 from yapa.tools.core.list_dir import list_dir
+from yapa.tools.core.write_file import write_file
+from yapa.tools.core.bash import bash
+from yapa.tools.core.edit_file import edit_file
 
 
 class TestReadFile:
@@ -66,3 +69,54 @@ class TestListDir:
     async def test_name_and_metadata(self):
         assert list_dir.name == "list_dir"
         assert list_dir.needs_approval is False
+
+
+class TestWriteFile:
+    async def test_writes_file(self, tmp_path: Path):
+        f = tmp_path / "out.txt"
+        result = await write_file.execute(path=str(f), content="hello")
+        assert f.read_text() == "hello"
+        assert result == "ok"
+
+    async def test_refuses_when_parent_missing(self, tmp_path: Path):
+        f = tmp_path / "missing" / "out.txt"
+        result = await write_file.execute(path=str(f), content="hello")
+        assert "parent directory does not exist" in result
+        assert not f.exists()
+
+    async def test_name_and_metadata(self):
+        assert write_file.name == "write_file"
+        assert write_file.needs_approval is True
+
+
+class TestBash:
+    async def test_runs_command(self):
+        result = await bash.execute(command="echo hello")
+        assert "hello" in result
+
+    async def test_failing_command(self):
+        result = await bash.execute(command="exit 1")
+        assert "exit code 1" in result
+
+    async def test_name_and_metadata(self):
+        assert bash.name == "bash"
+        assert bash.needs_approval is True
+
+
+class TestEditFile:
+    async def test_replaces_string(self, tmp_path: Path):
+        f = tmp_path / "test.txt"
+        f.write_text("hello world")
+        result = await edit_file.execute(path=str(f), old_string="world", new_string="there")
+        assert result == "ok"
+        assert f.read_text() == "hello there"
+
+    async def test_string_not_found(self, tmp_path: Path):
+        f = tmp_path / "test.txt"
+        f.write_text("hello")
+        result = await edit_file.execute(path=str(f), old_string="zzz", new_string="aaa")
+        assert "could not find" in result
+
+    async def test_name_and_metadata(self):
+        assert edit_file.name == "edit_file"
+        assert edit_file.needs_approval is True
