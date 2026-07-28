@@ -189,13 +189,13 @@ def models(
 ):
     """List available models."""
     from yapa.models import ModelType
+
     model_type_enum = ModelType(model_type) if model_type else None
-    
+
     service = ModelService()
-    results = asyncio.run(service.list_models(
-        provider_id=provider,
-        model_type=model_type_enum
-    ))
+    results = asyncio.run(
+        service.list_models(provider_id=provider, model_type=model_type_enum)
+    )
 
     if not results:
         if provider:
