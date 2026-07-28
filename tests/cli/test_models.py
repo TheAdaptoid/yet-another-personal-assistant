@@ -1,168 +1,146 @@
-"""Tests for model command handler and grouped display."""
+"""Tests for CLI models command."""
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
-from yapa.cli.models import _strip_group, display_models, set_default_model
-from yapa.config import Config
 from yapa.models import ModelData, ModelType
 
 
-class TestStripGroup:
-    """Tests for _strip_group helper."""
-
-    def test_strips_prefix(self):
-        assert _strip_group("openai/gpt-4", "openai") == "gpt-4"
-
-    def test_no_prefix_match(self):
-        assert _strip_group("anthropic/claude", "openai") == "anthropic/claude"
-
-    def test_other_group(self):
-        assert _strip_group("codellama-7b", "other") == "codellama-7b"
-
-
-class TestDisplayModels:
-    """Tests for display_models Tree output."""
-
-    def test_empty_models(self, capsys):
-        display_models("test-provider", [])
-        captured = capsys.readouterr()
-        assert "Models for" in captured.out
-        assert "(0)" in captured.out
-
-    def test_single_group(self, capsys):
-        models = [
-            ModelData(id="openai/gpt-4o", provider_id="p", type=ModelType.LLM),
-            ModelData(id="openai/gpt-4-turbo", provider_id="p", type=ModelType.LLM),
+def test_models_list(runner, mock_model_service):
+    mock_model_service.list_models = AsyncMock(
+        return_value=[
+            ModelData(id="gpt-4o", provider_id="openai", type=ModelType.LLM),
         ]
-        display_models("openrouter", models)
-        captured = capsys.readouterr()
-        assert "openai (2)" in captured.out
-        assert "gpt-4o" in captured.out
-        assert "gpt-4-turbo" in captured.out
+    )
 
-    def test_tree_connectors_single_group(self, capsys):
-        models = [
-            ModelData(id="openai/gpt-4o", provider_id="p", type=ModelType.LLM),
-            ModelData(id="openai/gpt-4-turbo", provider_id="p", type=ModelType.LLM),
+    with patch("yapa.cli.app.ModelService", return_value=mock_model_service):
+        from yapa.cli.app import cli
+
+        result = runner.invoke(cli, ["models"])
+        assert result.exit_code == 0
+        assert "gpt-4o" in result.stdout
+
+
+def test_models_list_by_provider(runner, mock_model_service):
+    mock_model_service.list_models = AsyncMock(return_value=[])
+
+    with patch("yapa.cli.app.ModelService", return_value=mock_model_service):
+        from yapa.cli.app import cli
+
+        result = runner.invoke(cli, ["models", "--provider", "openai"])
+        assert result.exit_code == 1  # no models found
+        mock_model_service.list_models.assert_called_once_with(
+            provider_id="openai", model_type=None
+        )
+
+
+def test_models_empty(runner, mock_model_service):
+    mock_model_service.list_models = AsyncMock(return_value=[])
+
+    with patch("yapa.cli.app.ModelService", return_value=mock_model_service):
+        from yapa.cli.app import cli
+
+        result = runner.invoke(cli, ["models"])
+        assert result.exit_code == 1  # no models found
+
+
+def test_models_filter_by_type_llm(runner, mock_model_service):
+    mock_model_service.list_models = AsyncMock(
+        return_value=[
+            ModelData(id="gpt-4o", provider_id="openai", type=ModelType.LLM),
+            ModelData(id="llama-3", provider_id="ollama", type=ModelType.LLM),
         ]
-        display_models("openrouter", models)
-        captured = capsys.readouterr()
-        assert "└──" in captured.out
-        assert "├──" in captured.out
+    )
 
-    def test_multiple_groups(self, capsys):
-        models = [
-            ModelData(id="openai/gpt-4o", provider_id="p", type=ModelType.LLM),
-            ModelData(id="anthropic/claude-3", provider_id="p", type=ModelType.LLM),
-            ModelData(id="mistral/mistral-small", provider_id="p", type=ModelType.LLM),
-        ]
-        display_models("openrouter", models)
-        captured = capsys.readouterr()
-        assert "anthropic (1)" in captured.out
-        assert "openai (1)" in captured.out
-        assert "mistral (1)" in captured.out
+    with patch("yapa.cli.app.ModelService", return_value=mock_model_service):
+        from yapa.cli.app import cli
 
-    def test_other_group(self, capsys):
-        models = [
-            ModelData(id="codellama-7b", provider_id="p", type=ModelType.LLM),
-            ModelData(id="openai/gpt-4o", provider_id="p", type=ModelType.LLM),
-        ]
-        display_models("test", models)
-        captured = capsys.readouterr()
-        assert "other (1)" in captured.out
-        assert "codellama-7b" in captured.out
-        assert "openai (1)" in captured.out
-        assert "gpt-4o" in captured.out
+        result = runner.invoke(cli, ["models", "--model-type", "llm"])
+        assert result.exit_code == 0
+        assert "gpt-4o" in result.stdout
+        assert "llama-3" in result.stdout
+        mock_model_service.list_models.assert_called_once_with(
+            provider_id=None, model_type=ModelType.LLM
+        )
 
 
-class TestSetDefaultModel:
-    """Tests for set_default_model."""
-
-    async def test_sets_default_model(self, monkeypatch):
-        models = [
+def test_models_filter_by_type_other(runner, mock_model_service):
+    mock_model_service.list_models = AsyncMock(
+        return_value=[
             ModelData(
-                id="openai/gpt-4o", provider_id="openrouter", type=ModelType.LLM
-            )
+                id="text-embedding-ada-002",
+                provider_id="openai",
+                type=ModelType.OTHER,
+            ),
         ]
-        mock_list_models = AsyncMock(return_value={"openrouter": models})
-        monkeypatch.setattr(
-            "yapa.cli.models.ProviderService.list_models", mock_list_models
+    )
+
+    with patch("yapa.cli.app.ModelService", return_value=mock_model_service):
+        from yapa.cli.app import cli
+
+        result = runner.invoke(cli, ["models", "--model-type", "other"])
+        assert result.exit_code == 0
+        assert "text-embedding-ada-002" in result.stdout
+        assert "other" in result.stdout
+        mock_model_service.list_models.assert_called_once_with(
+            provider_id=None, model_type=ModelType.OTHER
         )
 
-        config = Config(default_model="old:old/model")
-        monkeypatch.setattr("yapa.cli.models.get_config", lambda: config)
 
-        save_calls: list[Config] = []
-        monkeypatch.setattr(
-            "yapa.cli.models.save_config", lambda c: save_calls.append(c)
+def test_models_filter_by_type_no_results(runner, mock_model_service):
+    mock_model_service.list_models = AsyncMock(return_value=[])
+
+    with patch("yapa.cli.app.ModelService", return_value=mock_model_service):
+        from yapa.cli.app import cli
+
+        result = runner.invoke(cli, ["models", "--model-type", "llm"])
+        assert result.exit_code == 1
+        mock_model_service.list_models.assert_called_once_with(
+            provider_id=None, model_type=ModelType.LLM
         )
 
-        await set_default_model("openai/gpt-4o")
 
-        assert config.default_model == "openrouter:openai/gpt-4o"
-        assert len(save_calls) == 1
+def test_models_filter_by_type_invalid(runner, mock_model_service):
+    with patch("yapa.cli.app.ModelService", return_value=mock_model_service):
+        from yapa.cli.app import cli
 
-    async def test_model_not_found(self, monkeypatch, capsys):
-        mock_list_models = AsyncMock(return_value={"openrouter": []})
-        monkeypatch.setattr(
-            "yapa.cli.models.ProviderService.list_models", mock_list_models
-        )
+        result = runner.invoke(cli, ["models", "--model-type", "invalid"])
+        assert result.exit_code != 0
+        assert "Invalid" in result.stdout or "invalid" in str(result.exception)
 
-        await set_default_model("nonexistent/model")
 
-        captured = capsys.readouterr()
-        assert "not found" in captured.out
-
-    async def test_scoped_to_provider(self, monkeypatch):
-        models_a = [
-            ModelData(
-                id="prov_a/model-a", provider_id="prov_a", type=ModelType.LLM
-            )
+def test_models_filter_by_provider_and_type(runner, mock_model_service):
+    mock_model_service.list_models = AsyncMock(
+        return_value=[
+            ModelData(id="gpt-4o", provider_id="openai", type=ModelType.LLM),
         ]
-        models_b = [
-            ModelData(
-                id="prov_b/model-b", provider_id="prov_b", type=ModelType.LLM
-            )
+    )
+
+    with patch("yapa.cli.app.ModelService", return_value=mock_model_service):
+        from yapa.cli.app import cli
+
+        result = runner.invoke(
+            cli, ["models", "--provider", "openai", "--model-type", "llm"]
+        )
+        assert result.exit_code == 0
+        assert "gpt-4o" in result.stdout
+        mock_model_service.list_models.assert_called_once_with(
+            provider_id="openai", model_type=ModelType.LLM
+        )
+
+
+def test_models_filter_by_type_uses_short_flag(runner, mock_model_service):
+    mock_model_service.list_models = AsyncMock(
+        return_value=[
+            ModelData(id="gpt-4o", provider_id="openai", type=ModelType.LLM),
         ]
-        mock_list_models = AsyncMock(
-            return_value={"prov_a": models_a, "prov_b": models_b}
+    )
+
+    with patch("yapa.cli.app.ModelService", return_value=mock_model_service):
+        from yapa.cli.app import cli
+
+        result = runner.invoke(cli, ["models", "-t", "llm"])
+        assert result.exit_code == 0
+        assert "gpt-4o" in result.stdout
+        mock_model_service.list_models.assert_called_once_with(
+            provider_id=None, model_type=ModelType.LLM
         )
-        monkeypatch.setattr(
-            "yapa.cli.models.ProviderService.list_models", mock_list_models
-        )
-
-        config = Config(default_model="old:old/model")
-        monkeypatch.setattr("yapa.cli.models.get_config", lambda: config)
-
-        save_calls: list[Config] = []
-        monkeypatch.setattr(
-            "yapa.cli.models.save_config", lambda c: save_calls.append(c)
-        )
-
-        await set_default_model("prov_a/model-a", "prov_a")
-
-        assert config.default_model == "prov_a:prov_a/model-a"
-        assert len(save_calls) == 1
-
-    async def test_scoped_not_found_outside_provider(self, monkeypatch, capsys):
-        models_a = [
-            ModelData(
-                id="prov_a/model-a", provider_id="prov_a", type=ModelType.LLM
-            )
-        ]
-        models_b = [
-            ModelData(
-                id="prov_b/model-b", provider_id="prov_b", type=ModelType.LLM
-            )
-        ]
-        mock_list_models = AsyncMock(
-            return_value={"prov_a": models_a, "prov_b": models_b}
-        )
-        monkeypatch.setattr(
-            "yapa.cli.models.ProviderService.list_models", mock_list_models
-        )
-
-        await set_default_model("prov_b/model-b", "prov_a")
-
-        captured = capsys.readouterr()
-        assert "not found" in captured.out

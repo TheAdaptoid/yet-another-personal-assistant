@@ -3,19 +3,17 @@
 from pydantic import Field
 
 from .base import TrackedEntity
+from .inference import InferenceParams, ModelData
 from .message import Message
 
-DEFAULT_TITLE = "Untitled Session"
+DEFAULT_SESSION_TITLE = "Untitled Session"
 
 
 class Session(TrackedEntity):
-    """
-    A session is a collection of messages between a user and an AI.
+    """A session is a collection of messages between a user and an AI."""
 
-    Attributes:
-        title (str): The title of the session.
-        messages (list[Message]): The list of messages in the session.
-    """
-
-    title: str = Field(default=DEFAULT_TITLE)
+    title: str = Field(default=DEFAULT_SESSION_TITLE)
+    model: ModelData | None = Field(default=None)
+    system_prompt: str | None = Field(default=None)
+    inference_params: InferenceParams | None = Field(default=None)
     messages: list[Message] = Field(default_factory=list)

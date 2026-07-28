@@ -1,12 +1,8 @@
-"""YAPA Main Module."""
+"""YAPA main entry point."""
 
-from yapa.cli import cli
+from yapa.cli.app import cli
 
 
 def main() -> None:
-    """Entry point for the YAPA CLI."""
+    """Run the YAPA CLI."""
     cli()
-
-
-if __name__ == "__main__":
-    main()

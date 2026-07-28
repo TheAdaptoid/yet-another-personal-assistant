@@ -1,33 +1,83 @@
-"""Tests for session command handlers."""
+"""Tests for CLI sessions commands."""
 
-from yapa.cli.sessions import delete_session, list_sessions, rename_session
+from uuid import uuid4
 
-
-def test_list_sessions_empty(capsys):
-    """list_sessions prints a dim message when no sessions exist."""
-    list_sessions()
-    captured = capsys.readouterr()
-    assert "No sessions" in captured.out
+from yapa.models import Session
 
 
-def test_list_sessions_with_sessions(capsys, seeded_session):
-    """list_sessions prints a table when sessions exist."""
-    list_sessions()
-    captured = capsys.readouterr()
-    assert str(seeded_session.id)[:8] in captured.out
-    assert seeded_session.title in captured.out
+def test_sessions_list(runner, mock_store):
+    mock_store.list.return_value = [Session(title="Test")]
+
+    from yapa.cli.app import cli
+
+    result = runner.invoke(cli, ["sessions", "list"])
+    assert result.exit_code == 0
+    assert "Test" in result.stdout
 
 
-def test_rename_session_missing(capsys):
-    """rename_session prints an error for a nonexistent session."""
-    rename_session("nonexistent", "New Title")
-    captured = capsys.readouterr()
-    assert "not found" in captured.out
+def test_sessions_list_empty(runner, mock_store):
+    mock_store.list.return_value = []
+
+    from yapa.cli.app import cli
+
+    result = runner.invoke(cli, ["sessions", "list"])
+    assert result.exit_code == 0
+    assert "No sessions" in result.stdout
 
 
-def test_delete_session_missing(capsys):
-    """delete_session prints an error for a nonexistent session."""
-    delete_session("nonexistent")
-    captured = capsys.readouterr()
-    assert "not found" in captured.out
+def test_sessions_get(runner, mock_store):
+    session = Session(title="Test")
+    mock_store.load.return_value = session
 
+    from yapa.cli.app import cli
+
+    result = runner.invoke(cli, ["sessions", "get", str(session.id)])
+    assert result.exit_code == 0
+    assert "Test" in result.stdout
+
+
+def test_sessions_get_not_found(runner, mock_store):
+    mock_store.load.side_effect = FileNotFoundError("not found")
+
+    from yapa.cli.app import cli
+
+    result = runner.invoke(cli, ["sessions", "get", str(uuid4())])
+    assert result.exit_code == 1
+    assert "Error:" in result.stdout
+
+
+def test_sessions_delete(runner, mock_store):
+    from yapa.cli.app import cli
+
+    result = runner.invoke(cli, ["sessions", "delete", str(uuid4())])
+    assert result.exit_code == 0
+    assert "✓" in result.stdout
+
+
+def test_sessions_delete_not_found(runner, mock_store):
+    mock_store.delete.side_effect = FileNotFoundError("not found")
+
+    from yapa.cli.app import cli
+
+    result = runner.invoke(cli, ["sessions", "delete", str(uuid4())])
+    assert result.exit_code == 1
+
+
+def test_sessions_rename(runner, mock_store):
+    session = Session(title="New Title")
+    mock_store.load.return_value = session
+
+    from yapa.cli.app import cli
+
+    result = runner.invoke(cli, ["sessions", "rename", str(session.id), "New Title"])
+    assert result.exit_code == 0
+    assert "✓" in result.stdout
+
+
+def test_sessions_rename_not_found(runner, mock_store):
+    mock_store.load.side_effect = FileNotFoundError("not found")
+
+    from yapa.cli.app import cli
+
+    result = runner.invoke(cli, ["sessions", "rename", str(uuid4()), "Nope"])
+    assert result.exit_code == 1

@@ -1,5 +1,5 @@
 """Service-layer exceptions."""
 
 
-class ConversationError(Exception):
-    """Raised when a conversation operation fails."""
+class ChatError(Exception):
+    """Raised when a chat operation fails."""

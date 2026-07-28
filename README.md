@@ -1,28 +1,31 @@
 # Yet Another Personal Assistant (YAPA)
 
-YAPA is a terminal-first assistant with a Typer CLI, SQLite-backed session
-persistence, and pluggable inference providers.
+YAPA is a Bring-Your-Own-Frontend AI backend. It has a Typer CLI for
+maintenance tasks and a FastAPI server with REST and WebSocket endpoints.
+A WebUI is in development. It uses pluggable inference providers for
+model access.
 
 ## What it does today
 
-- Lists available models from configured providers (grouped by vendor prefix, filtered to LLMs only)
-- Sets a default model via `--set` and scoped provider lookup via `--provider`
-- Runs an interactive chat loop with streaming responses
-- Auto-titles new sessions based on the first user message using the default LLM
-- Supports slash commands for in-chat model/session switching and help
-- Persists conversations as sessions in a local SQLite database (`~/.yapa/yapa.db`)
-- Manages sessions (list, rename with manual or auto-generated title, delete, purge) via CLI commands
-- Resumes the most recent session via `--continue`
+- Lists models from configured providers. Optionally filter by provider or model type.
+- Starts a local API server with REST and WebSocket endpoints.
+- Runs chat sessions over a WebSocket connection. Messages stream as
+  events in real time.
+- Persists conversations as sessions in JSON files at
+  `~/.yapa/storage/{uuid}.json`.
+- Manages sessions from the CLI (list, get, rename, delete).
+- Shows current configuration from the CLI.
 
 Current providers:
 
+- `openai`
 - `openrouter`
 - `lmstudio`
 - `ollama`
 
 ## Installation
 
-Install globally with `uv` (recommended):
+Install globally with `uv`:
 
 ```bash
 uv tool install git+https://github.com/TheAdaptoid/yet-another-personal-assistant
@@ -34,7 +37,7 @@ After installation the `yapa` command is available from any directory:
 yapa --help
 ```
 
-To run without installing (temporary, uses a cached ephemeral environment):
+To run without installing:
 
 ```bash
 uvx yapa --help
@@ -55,18 +58,15 @@ uv tool upgrade yapa
    uv sync
    ```
 
-3. Configure environment variables (example, or add to a `.env` file):
+3. Configure at least one provider:
 
    ```bash
-    OPENROUTER_API_KEY=your_openrouter_api_key
-    LMSTUDIO_API_KEY=your_lmstudio_api_key_or_placeholder
-    OLLAMA_API_KEY=your_ollama_api_key_or_placeholder
-    YAPA_DEFAULT_MODEL=openrouter:openrouter/free
-    YAPA_LOG_LEVEL=INFO
+   yapa config set provider_configs.openai.api_key <OPENAI_API_KEY>
+   yapa config set provider_configs.openrouter.api_key <OPENROUTER_API_KEY>
    ```
 
-Configuration can also be persisted to `~/.yapa/config.json`. Environment variables
-override file values.
+   You can also edit `~/.yapa/config.json` directly. Other settings use
+   defaults. Change them with the CLI or env vars.
 
 ## Usage
 
@@ -82,68 +82,61 @@ From a development checkout:
 uv run python -m yapa
 ```
 
-List models (grouped by vendor):
+List models:
 
 ```bash
 yapa models
 yapa models --provider openrouter
+yapa models --model-type llm
 ```
 
-Set the default model (validates the model exists):
+Show current configuration:
 
 ```bash
-yapa models --set openrouter/free
-yapa models --provider openrouter --set openai/gpt-4o
-```
-
-Start interactive chat (auto-creates a session):
-
-```bash
-yapa chat
-yapa chat --model openrouter/free
-```
-
-Continue the most recent session:
-
-```bash
-yapa chat --continue
-```
-
-Resume a previous session:
-
-```bash
-yapa chat --session <session-id> --model openrouter/free
+yapa config show
+yapa config set log_level DEBUG
+yapa config set provider_configs.openai.api_key sk-...
 ```
 
 Manage sessions:
 
 ```bash
 yapa sessions list
+yapa sessions get <session-id>
 yapa sessions rename <session-id> "New Title"
-yapa sessions rename <session-id> --auto    # generate title via LLM
 yapa sessions delete <session-id>
-yapa sessions delete --purge                # delete empty sessions
 ```
 
-> **Note:** All examples below use the installed `yapa` command. Replace with
-> `uv run python -m yapa` when running from a development checkout.
+Start the API server:
 
-Within a chat session the following slash commands are available:
+```bash
+yapa server
+yapa server --host 0.0.0.0 --port 9000
+```
 
-| Command | Description |
-|---|---|
-| `/help` | Show available commands |
-| `/exit` | Exit the chat session |
-| `/model <model-id>` | Switch to a different model |
-| `/session <session-id>` | Switch to a different session |
-| `/sessions` | List all sessions |
+The server provides:
+
+- `GET /api/v1/health` — health check
+- `GET /api/v1/models` — list models (optional `provider_id`,
+  `model_type` query params)
+- `GET /api/v1/models/{full_id}` — get a single model
+- `GET /api/v1/sessions` — list sessions (pagination via `page`,
+  `per_page`)
+- `POST /api/v1/sessions` — create a session
+- `GET /api/v1/sessions/{id}` — get a session
+- `PATCH /api/v1/sessions/{id}` — rename a session
+- `DELETE /api/v1/sessions/{id}` — delete a session
+- `PATCH /api/v1/sessions/{id}/system-prompt` — update system prompt
+- `PATCH /api/v1/sessions/{id}/inference-params` — update inference
+  params
+- `WS /api/v1/chat/{session_id}` — streaming chat over WebSocket
 
 ## Quality checks
 
 ```bash
 uv run ruff check src/ tests/
 uv run ty check src/
-uv run pytest tests/ -v  # enforces ≥80% coverage
+uv run pytest tests/ -v
 ```
 
 Recommended local gate:
@@ -156,11 +149,15 @@ uv run ruff check src/ tests/ && uv run ty check src/ && uv run pytest tests/ -v
 
 ```text
 src/yapa/
-  cli/         # Typer commands (app, chat, models, sessions)
-  models/      # Message, inference, and session data models
-  providers/   # Provider abstraction + implementations (OpenRouter, LM Studio)
-  services/    # UI-agnostic business logic (conversation, session, provider services)
-  storage/     # JSON-based object persistence
-  config.py    # Config loading and persistence
-  logging.py   # File and console logging helpers
+  __main__.py  # Entry point — wires to the Typer CLI
+  logging.py   # File and console logging to ~/.yapa/logs/
+  api/         # FastAPI application (REST routes + WebSocket chat)
+  cli/         # Typer CLI commands (server, config, models, sessions)
+  models/      # Pydantic v2 data models (Session, Message, Event,
+               # InferenceParams)
+  providers/   # Provider ABC + implementations (OpenAI, OpenRouter,
+               # LM Studio, Ollama)
+  services/    # Business logic with protocol-based dependency injection
+  storage/     # GenericStore — JSON file persistence
+  tools/       # Tool abstractions (not yet integrated into ChatService)
 ```
