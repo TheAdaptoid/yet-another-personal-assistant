@@ -39,6 +39,32 @@ You can send multiple prompts over the same connection. The server
 responds to each prompt with its own sequence of events. The connection
 stays open until you or the server closes it.
 
+### Tool approval responses
+
+When the model calls a tool that requires approval, the server sends a
+`ToolApprovalRequestEvent`. You must respond with a tool approval
+message on the same connection:
+
+```
+{
+  "type": "tool_approval",
+  "call_id": "call_abc123",
+  "approved": true
+}
+```
+
+Fields:
+
+- `type` (required): Must be `"tool_approval"`.
+- `call_id` (required): The `call_id` from the `ToolApprovalRequestEvent`.
+- `approved` (required): `true` to allow the tool, `false` to deny it.
+- `reason` (optional): A string explaining why the tool was denied. The
+  reason is fed back to the model so it can adjust its behavior.
+
+The server waits up to 120 seconds for the approval response. If the
+response does not arrive in time, the tool call is denied with reason
+`"Approval timeout"`.
+
 ## Receive events
 
 The server sends one JSON object per event. Each event has a `type`
@@ -135,13 +161,148 @@ last saved state.
 }
 ```
 
+### ToolCallEvent
+
+The server sends this event when the model decides to call a tool. One
+`ToolCallEvent` is emitted per tool call in the response. The model may
+call multiple tools in a single response.
+
+```
+{
+  "type": "tool_call",
+  "source": "agent",
+  "timestamp": "2026-07-27T12:00:02Z",
+  "tool_name": "read_file",
+  "arguments": {"path": "/home/user/data.txt"},
+  "call_id": "call_abc123"
+}
+```
+
+### ToolApprovalRequestEvent
+
+The server sends this event before executing a tool that requires
+approval (`needs_approval=True`). The client must respond with a tool
+approval message (see the "Send a message" section above). The server
+waits for the response before executing the tool.
+
+```
+{
+  "type": "tool_approval_request",
+  "source": "system",
+  "timestamp": "2026-07-27T12:00:02Z",
+  "tool_name": "write_file",
+  "arguments": {"path": "/home/user/output.txt", "content": "data"},
+  "call_id": "call_def456"
+}
+```
+
+### ToolResultEvent
+
+The server sends this event after a tool has been executed. The `result`
+field contains the tool output on success or an error description on
+failure. Errors are also fed back to the model as tool messages so the
+model can retry.
+
+```
+{
+  "type": "tool_result",
+  "source": "system",
+  "timestamp": "2026-07-27T12:00:03Z",
+  "tool_name": "read_file",
+  "call_id": "call_abc123",
+  "result": "file contents here"
+}
+```
+
+On tool execution failure:
+
+```
+{
+  "type": "tool_result",
+  "source": "system",
+  "timestamp": "2026-07-27T12:00:03Z",
+  "tool_name": "bash",
+  "call_id": "call_ghi789",
+  "result": {"error": "Command timed out after 60 seconds"}
+}
+```
+
 ## Event sequence
+
+### Text-only response (no tool calls)
 
 Each prompt produces one complete event sequence:
 
 ```
 AgentStartEvent -> (TextEvent | ReasoningEvent)* -> AgentDoneEvent
 ```
+
+### Response with tool calls
+
+When the model calls tools, the server runs an agentic loop. The loop
+executes each tool, feeds the results back to the model, and re-invokes
+the model until it produces a text response. The loop runs up to 10
+iterations.
+
+Safe tools (no approval needed):
+
+```
+AgentStartEvent
+  -> (TextEvent | ReasoningEvent)*
+  -> ToolCallEvent
+  -> ToolResultEvent
+  -> (TextEvent | ReasoningEvent)*
+  -> AgentDoneEvent
+```
+
+Dangerous tools (approval required):
+
+```
+AgentStartEvent
+  -> (TextEvent | ReasoningEvent)*
+  -> ToolCallEvent
+  -> ToolApprovalRequestEvent
+  <- client responds with tool approval
+  -> ToolResultEvent
+  -> (TextEvent | ReasoningEvent)*
+  -> AgentDoneEvent
+```
+
+Multiple tool calls in one response:
+
+```
+AgentStartEvent
+  -> ToolCallEvent (tool_1)
+  -> ToolCallEvent (tool_2)
+  -> ToolApprovalRequestEvent (tool_1)
+  <- client approves
+  -> ToolResultEvent (tool_1)
+  -> ToolResultEvent (tool_2)
+  -> (TextEvent | ReasoningEvent)*
+  -> AgentDoneEvent
+```
+
+Denied tool:
+
+```
+AgentStartEvent
+  -> ToolCallEvent
+  -> ToolApprovalRequestEvent
+  <- client denies with reason "wrong file"
+  -> ToolResultEvent (result contains "Tool call denied: wrong file")
+  -> (TextEvent | ReasoningEvent)* (model acknowledges denial)
+  -> AgentDoneEvent
+```
+
+Max iterations reached (no text response after 10 rounds):
+
+```
+AgentStartEvent
+  -> ToolCallEvent (repeated 10 times)
+  -> AgentErrorEvent (message: "Max iterations reached")
+```
+
+### Error sequences
 
 On error:
 
@@ -167,7 +328,8 @@ The close code is `4008` for all error cases.
 
 ## JavaScript example
 
-This example uses the browser `WebSocket` API.
+This example uses the browser `WebSocket` API and handles tool approval
+requests.
 
 ```javascript
 const HOST = "127.0.0.1";
@@ -177,7 +339,7 @@ const SESSION_ID = "your-session-uuid";
 const ws = new WebSocket(`ws://${HOST}:${PORT}/api/v1/chat/${SESSION_ID}`);
 
 ws.onopen = () => {
-  ws.send(JSON.stringify({ prompt: "What is the weather in London?" }));
+  ws.send(JSON.stringify({ prompt: "Read the file data.txt" }));
 };
 
 const output = document.getElementById("output"); // assumes HTML element
@@ -194,6 +356,21 @@ ws.onmessage = (event) => {
       break;
     case "reasoning_chunk":
       console.log("Reasoning:", data.content);
+      break;
+    case "tool_call":
+      console.log(`Tool call: ${data.tool_name}(${JSON.stringify(data.arguments)})`);
+      break;
+    case "tool_approval_request":
+      console.log(`Approval needed: ${data.tool_name}`);
+      // Show approval UI, then respond
+      ws.send(JSON.stringify({
+        type: "tool_approval",
+        call_id: data.call_id,
+        approved: true,
+      }));
+      break;
+    case "tool_result":
+      console.log(`Tool result: ${JSON.stringify(data.result)}`);
       break;
     case "agent_done":
       console.log("Done:", data.finish_reason);
@@ -219,7 +396,8 @@ ws.onclose = (event) => {
 
 ## Python example
 
-This example uses the `websockets` library.
+This example uses the `websockets` library and handles tool approval
+requests automatically.
 
 ```python
 import asyncio
@@ -237,7 +415,7 @@ async def chat():
 
     async with websockets.connect(uri) as ws:
         await ws.send(json.dumps({
-            "prompt": "What is the weather in London?",
+            "prompt": "Read and summarize the file data.txt",
         }))
 
         async for raw in ws:
@@ -250,6 +428,28 @@ async def chat():
                 print(event["content"], end="", flush=True)
             elif event_type == "reasoning_chunk":
                 print(f"\n[Reasoning]: {event['content']}")
+            elif event_type == "tool_call":
+                print(
+                    f"\n[Tool call]: {event['tool_name']}"
+                    f"({json.dumps(event['arguments'])})"
+                )
+            elif event_type == "tool_approval_request":
+                print(
+                    f"\n[Approval needed]: {event['tool_name']}"
+                    f"({json.dumps(event['arguments'])})"
+                )
+                # Auto-approve. In a real client, show a UI prompt.
+                await ws.send(json.dumps({
+                    "type": "tool_approval",
+                    "call_id": event["call_id"],
+                    "approved": True,
+                }))
+            elif event_type == "tool_result":
+                result = event["result"]
+                if isinstance(result, dict) and "error" in result:
+                    print(f"\n[Tool error]: {result['error']}")
+                else:
+                    print(f"\n[Tool result]: {result}")
             elif event_type == "agent_done":
                 print()
                 print(f"Finish reason: {event.get('finish_reason')}")
