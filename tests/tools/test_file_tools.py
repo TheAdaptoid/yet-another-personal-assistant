@@ -1,11 +1,11 @@
-import pytest
 from pathlib import Path
-from yapa.tools.core.read_file import read_file
-from yapa.tools.core.grep import grep
-from yapa.tools.core.list_dir import list_dir
-from yapa.tools.core.write_file import write_file
+
 from yapa.tools.core.bash import bash
 from yapa.tools.core.edit_file import edit_file
+from yapa.tools.core.grep import grep
+from yapa.tools.core.list_dir import list_dir
+from yapa.tools.core.read_file import read_file
+from yapa.tools.core.write_file import write_file
 
 
 class TestReadFile:
@@ -107,14 +107,18 @@ class TestEditFile:
     async def test_replaces_string(self, tmp_path: Path):
         f = tmp_path / "test.txt"
         f.write_text("hello world")
-        result = await edit_file.execute(path=str(f), old_string="world", new_string="there")
+        result = await edit_file.execute(
+            path=str(f), old_string="world", new_string="there"
+        )
         assert result == "ok"
         assert f.read_text() == "hello there"
 
     async def test_string_not_found(self, tmp_path: Path):
         f = tmp_path / "test.txt"
         f.write_text("hello")
-        result = await edit_file.execute(path=str(f), old_string="zzz", new_string="aaa")
+        result = await edit_file.execute(
+            path=str(f), old_string="zzz", new_string="aaa"
+        )
         assert "could not find" in result
 
     async def test_name_and_metadata(self):

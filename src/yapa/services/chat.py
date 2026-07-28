@@ -24,12 +24,11 @@ from yapa.models.event import (
     ToolCallEvent,
     ToolResultEvent,
 )
-from yapa.models.inference import ToolCallDelta
+from yapa.models.inference import TokenUsage, ToolCallDelta
 from yapa.models.tool import ToolApprovalRequest, ToolApprovalResponse, ToolCall
 from yapa.services.models import ModelService
 from yapa.services.session import SessionService
 from yapa.tools.registry import ToolRegistry
-
 
 ToolApprovalGetter = Callable[
     [ToolApprovalRequest],
@@ -49,6 +48,7 @@ class ChatService:
         models: ModelService,
         tools: ToolRegistry,
     ) -> None:
+        """Initialize with session, model, and tool services."""
         self._sessions = sessions
         self._models = models
         self._tools = tools
@@ -60,6 +60,7 @@ class ChatService:
         model: ModelData | None = None,
         get_approval: ToolApprovalGetter | None = None,
     ) -> AsyncGenerator[Event, None]:
+        """Run the agentic loop: stream model response, execute tools, repeat."""
         session = self._sessions.get(str(session_id))
 
         if model is None:
@@ -83,28 +84,15 @@ class ChatService:
 
         try:
             for _ in range(self.MAX_ITERATIONS):
-                content_buffer = ""
-                finish_reason: str | None = None
-                usage = None
-                raw_tool_calls: list[tuple[int, str | None, str | None, str | None]] = []
-
-                async for delta in provider.stream_chat(
-                    model=model,
-                    messages=messages,
-                    tools=self._tools.list_tools(),
-                    params=params,
-                ):
-                    if delta.reasoning_content:
-                        yield ReasoningEvent(content=delta.reasoning_content)
-                    if delta.content:
-                        content_buffer += delta.content
-                        yield TextEvent(content=delta.content)
-                    for tcd in delta.tool_calls:
-                        _merge_tool_call_delta(raw_tool_calls, tcd)
-                    if delta.finish_reason:
-                        finish_reason = delta.finish_reason
-                    if delta.usage:
-                        usage = delta.usage
+                (
+                    events,
+                    content_buffer,
+                    finish_reason,
+                    usage,
+                    raw_tool_calls,
+                ) = await self._process_stream_deltas(provider, model, messages, params)
+                for event in events:
+                    yield event
 
                 # Assemble tool calls
                 tool_calls = [
@@ -139,62 +127,151 @@ class ChatService:
                     return
 
                 # Execute tool calls
-                for tc in tool_calls:
-                    tool = self._tools.get_tool(tc.tool_name)
-
-                    if tool is None:
-                        yield ToolCallEvent(tool_name=tc.tool_name, arguments=tc.arguments, call_id=tc.id)
-                        messages.append(ToolMessage(
-                            content=f"Unknown tool: {tc.tool_name}",
-                            tool_call_id=tc.id,
-                            tool_name=tc.tool_name,
-                        ))
-                        continue
-
-                    yield ToolCallEvent(tool_name=tc.tool_name, arguments=tc.arguments, call_id=tc.id)
-
-                    if tool.needs_approval:
-                        yield ToolApprovalRequestEvent(
-                            tool_name=tc.tool_name,
-                            arguments=tc.arguments,
-                            call_id=tc.id,
-                        )
-                        if get_approval is not None:
-                            response = await get_approval(ToolApprovalRequest(
-                                call_id=tc.id,
-                                name=tc.tool_name,
-                                arguments=tc.arguments,
-                            ))
-                            if not response.approved:
-                                reason = response.reason or "No reason given"
-                                messages.append(ToolMessage(
-                                    content=f"Tool call denied: {reason}",
-                                    tool_call_id=tc.id,
-                                    tool_name=tc.tool_name,
-                                ))
-                                continue
-
-                    try:
-                        result = await tool.execute(**tc.arguments)
-                        yield ToolResultEvent(tool_name=tc.tool_name, call_id=tc.id, result=result)
-                        messages.append(ToolMessage(
-                            content=_serialize_result(result),
-                            tool_call_id=tc.id,
-                            tool_name=tc.tool_name,
-                        ))
-                    except Exception as e:
-                        yield ToolResultEvent(tool_name=tc.tool_name, call_id=tc.id, result={"error": str(e)})
-                        messages.append(ToolMessage(
-                            content=f"Error: {e}",
-                            tool_call_id=tc.id,
-                            tool_name=tc.tool_name,
-                        ))
+                tool_events, messages = await self._execute_tool_calls(
+                    tool_calls=tool_calls,
+                    messages=messages,
+                    get_approval=get_approval,
+                )
+                for event in tool_events:
+                    yield event
 
             # Exceeded max iterations
             yield AgentErrorEvent(message="Max iterations reached")
 
         except Exception as e:
             yield AgentErrorEvent(message=str(e))
+
+    async def _process_stream_deltas(
+        self,
+        provider,
+        model: ModelData,
+        messages: list[Message],
+        params: InferenceParams,
+    ) -> tuple[
+        list[Event],
+        str,
+        str | None,
+        TokenUsage | None,
+        list[tuple[int, str | None, str | None, str | None]],
+    ]:
+        """Stream deltas from provider, yield events, and return accumulators."""
+        events: list[Event] = []
+        content_buffer = ""
+        finish_reason: str | None = None
+        usage: TokenUsage | None = None
+        raw_tool_calls: list[tuple[int, str | None, str | None, str | None]] = []
+
+        async for delta in provider.stream_chat(
+            model=model,
+            messages=messages,
+            tools=self._tools.list_tools(),
+            params=params,
+        ):
+            if delta.reasoning_content:
+                events.append(ReasoningEvent(content=delta.reasoning_content))
+            if delta.content:
+                content_buffer += delta.content
+                events.append(TextEvent(content=delta.content))
+            for tcd in delta.tool_calls:
+                _merge_tool_call_delta(raw_tool_calls, tcd)
+            if delta.finish_reason:
+                finish_reason = delta.finish_reason
+            if delta.usage:
+                usage = delta.usage
+
+        return events, content_buffer, finish_reason, usage, raw_tool_calls
+
+    async def _execute_tool_calls(
+        self,
+        tool_calls: list[ToolCall],
+        messages: list[Message],
+        get_approval: ToolApprovalGetter | None,
+    ) -> tuple[list[Event], list[Message]]:
+        """Execute tool calls, collect events, return updated messages."""
+        events: list[Event] = []
+        for tc in tool_calls:
+            tool = self._tools.get_tool(tc.tool_name)
+
+            if tool is None:
+                events.append(
+                    ToolCallEvent(
+                        tool_name=tc.tool_name,
+                        arguments=tc.arguments,
+                        call_id=tc.id,
+                    )
+                )
+                messages.append(
+                    ToolMessage(
+                        content=f"Unknown tool: {tc.tool_name}",
+                        tool_call_id=tc.id,
+                        tool_name=tc.tool_name,
+                    )
+                )
+                continue
+
+            events.append(
+                ToolCallEvent(
+                    tool_name=tc.tool_name, arguments=tc.arguments, call_id=tc.id
+                )
+            )
+
+            if tool.needs_approval:
+                events.append(
+                    ToolApprovalRequestEvent(
+                        tool_name=tc.tool_name,
+                        arguments=tc.arguments,
+                        call_id=tc.id,
+                    )
+                )
+                if get_approval is not None:
+                    response = await get_approval(
+                        ToolApprovalRequest(
+                            call_id=tc.id,
+                            name=tc.tool_name,
+                            arguments=tc.arguments,
+                        )
+                    )
+                    if not response.approved:
+                        reason = response.reason or "No reason given"
+                        messages.append(
+                            ToolMessage(
+                                content=f"Tool call denied: {reason}",
+                                tool_call_id=tc.id,
+                                tool_name=tc.tool_name,
+                            )
+                        )
+                        continue
+
+            try:
+                result = await tool.execute(**tc.arguments)
+                events.append(
+                    ToolResultEvent(
+                        tool_name=tc.tool_name, call_id=tc.id, result=result
+                    )
+                )
+                messages.append(
+                    ToolMessage(
+                        content=_serialize_result(result),
+                        tool_call_id=tc.id,
+                        tool_name=tc.tool_name,
+                    )
+                )
+            except Exception as e:
+                events.append(
+                    ToolResultEvent(
+                        tool_name=tc.tool_name,
+                        call_id=tc.id,
+                        result={"error": str(e)},
+                    )
+                )
+                messages.append(
+                    ToolMessage(
+                        content=f"Error: {e}",
+                        tool_call_id=tc.id,
+                        tool_name=tc.tool_name,
+                    )
+                )
+        return events, messages
 
 
 def _merge_tool_call_delta(

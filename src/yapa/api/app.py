@@ -34,7 +34,12 @@ def _build_services(config: Config):
 async def _lifespan(app: FastAPI):
     if not all(
         hasattr(app.state, name)
-        for name in ("session_service", "model_service", "chat_service", "tool_registry")
+        for name in (
+            "session_service",
+            "model_service",
+            "chat_service",
+            "tool_registry",
+        )
     ):
         (
             app.state.session_service,

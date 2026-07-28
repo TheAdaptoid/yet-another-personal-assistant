@@ -1,6 +1,5 @@
 """Tests for SessionService."""
 
-
 import pytest
 
 from yapa.models import (
@@ -202,9 +201,7 @@ class TestAddMessages:
         service = SessionService(store=store)
         session = service.create()
         model = ModelData(id="claude", provider_id="anthropic", type=ModelType.LLM)
-        updated = service.add_messages(
-            str(session.id), [], model=model
-        )
+        updated = service.add_messages(str(session.id), [], model=model)
         assert updated.model is not None
         assert updated.model.id == "claude"
 

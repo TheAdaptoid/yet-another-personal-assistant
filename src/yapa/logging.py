@@ -38,8 +38,8 @@ def get_logger(
     logger.setLevel(log_level)
     logger.handlers.clear()
 
-    log_dir = Path.home() / ".yapa" / "logs" / datetime.now(timezone.utc).strftime(
-        "%Y-%m-%d"
+    log_dir = (
+        Path.home() / ".yapa" / "logs" / datetime.now(timezone.utc).strftime("%Y-%m-%d")
     )
     log_dir.mkdir(parents=True, exist_ok=True)
 

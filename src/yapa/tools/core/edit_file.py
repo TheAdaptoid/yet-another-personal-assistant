@@ -6,10 +6,17 @@ from yapa.tools.base import JsonValue, Tool
 
 
 class EditFile(Tool):
+    """Replace text in a file without rewriting the entire file."""
+
     def __init__(self):
+        """Configure the edit_file tool with path and string parameters."""
         super().__init__(
             name="edit_file",
-            description="Replace the first occurrence of old_string with new_string in a file. Use for surgical edits without rewriting entire files.",
+            description=(
+                "Replace the first occurrence of old_string with new_string "
+                "in a file. Use for surgical edits without rewriting "
+                "entire files."
+            ),
             parameters={
                 "type": "object",
                 "properties": {
@@ -19,7 +26,9 @@ class EditFile(Tool):
                     },
                     "old_string": {
                         "type": "string",
-                        "description": "The exact string to replace (first occurrence only)",
+                        "description": (
+                            "The exact string to replace (first occurrence only)"
+                        ),
                     },
                     "new_string": {
                         "type": "string",
@@ -31,7 +40,14 @@ class EditFile(Tool):
             needs_approval=True,
         )
 
-    async def execute(self, path: str = "", old_string: str = "", new_string: str = "", **kwargs: object) -> JsonValue:
+    async def execute(
+        self,
+        path: str = "",
+        old_string: str = "",
+        new_string: str = "",
+        **kwargs: object,
+    ) -> JsonValue:
+        """Replace the first occurrence of old_string with new_string."""
         try:
             p = Path(path).resolve()
             text = p.read_text()

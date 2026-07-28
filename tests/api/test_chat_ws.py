@@ -175,10 +175,22 @@ def test_chat_ws_tool_approval_flow(client, mock_chat_service, mock_session_serv
 
     async def _stream(*, session_id, prompt, model, get_approval=None):
         yield AgentStartEvent(model_id="openai:gpt-4o")
-        yield ToolCallEvent(tool_name="write_file", arguments={"path": "/tmp/test.txt"}, call_id="call_1")
-        yield ToolApprovalRequestEvent(tool_name="write_file", arguments={"path": "/tmp/test.txt"}, call_id="call_1")
+        yield ToolCallEvent(
+            tool_name="write_file",
+            arguments={"path": "/tmp/test.txt"},
+            call_id="call_1",
+        )
+        yield ToolApprovalRequestEvent(
+            tool_name="write_file",
+            arguments={"path": "/tmp/test.txt"},
+            call_id="call_1",
+        )
         # Simulate waiting for approval
-        response = await get_approval(ToolApprovalRequest(call_id="call_1", name="write_file", arguments={"path": "/tmp/test.txt"}))
+        response = await get_approval(
+            ToolApprovalRequest(
+                call_id="call_1", name="write_file", arguments={"path": "/tmp/test.txt"}
+            )
+        )
         if response.approved:
             yield ToolResultEvent(tool_name="write_file", call_id="call_1", result="ok")
         yield AgentDoneEvent(content="File written", finish_reason="stop")
@@ -194,7 +206,9 @@ def test_chat_ws_tool_approval_flow(client, mock_chat_service, mock_session_serv
             if msg["type"] == "tool_approval_request":
                 assert msg["tool_name"] == "write_file"
                 # Send approval response
-                ws.send_json({"type": "tool_approval", "call_id": "call_1", "approved": True})
+                ws.send_json(
+                    {"type": "tool_approval", "call_id": "call_1", "approved": True}
+                )
                 break
 
         # Receive remaining events
@@ -215,8 +229,12 @@ def test_chat_ws_tool_denial_flow(client, mock_chat_service, mock_session_servic
     async def _stream(*, session_id, prompt, model, get_approval=None):
         yield AgentStartEvent(model_id="openai:gpt-4o")
         yield ToolCallEvent(tool_name="write_file", arguments={}, call_id="call_1")
-        yield ToolApprovalRequestEvent(tool_name="write_file", arguments={}, call_id="call_1")
-        response = await get_approval(ToolApprovalRequest(call_id="call_1", name="write_file", arguments={}))
+        yield ToolApprovalRequestEvent(
+            tool_name="write_file", arguments={}, call_id="call_1"
+        )
+        response = await get_approval(
+            ToolApprovalRequest(call_id="call_1", name="write_file", arguments={})
+        )
         assert not response.approved
         yield AgentDoneEvent(content="Denied", finish_reason="stop")
 
@@ -227,7 +245,14 @@ def test_chat_ws_tool_denial_flow(client, mock_chat_service, mock_session_servic
         while True:
             msg = ws.receive_json()
             if msg["type"] == "tool_approval_request":
-                ws.send_json({"type": "tool_approval", "call_id": "call_1", "approved": False, "reason": "unsafe"})
+                ws.send_json(
+                    {
+                        "type": "tool_approval",
+                        "call_id": "call_1",
+                        "approved": False,
+                        "reason": "unsafe",
+                    }
+                )
                 break
         msg = ws.receive_json()
         assert msg["type"] == "agent_done"

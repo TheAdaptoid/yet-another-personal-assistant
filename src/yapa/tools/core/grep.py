@@ -6,10 +6,16 @@ from yapa.tools.base import JsonValue, Tool
 
 
 class Grep(Tool):
+    """Search file contents for a regex pattern."""
+
     def __init__(self):
+        """Configure the grep tool with pattern and path parameters."""
         super().__init__(
             name="grep",
-            description="Search for a pattern in files within a directory. Returns matching file paths with line numbers and content.",
+            description=(
+                "Search for a pattern in files within a directory. "
+                "Returns matching file paths with line numbers and content."
+            ),
             parameters={
                 "type": "object",
                 "properties": {
@@ -23,7 +29,9 @@ class Grep(Tool):
                     },
                     "include": {
                         "type": "string",
-                        "description": "Optional glob pattern to filter files (e.g. '*.py')",
+                        "description": (
+                            "Optional glob pattern to filter files (e.g. '*.py')"
+                        ),
                     },
                 },
                 "required": ["pattern", "path"],
@@ -31,8 +39,16 @@ class Grep(Tool):
             needs_approval=False,
         )
 
-    async def execute(self, pattern: str = "", path: str = "", include: str | None = None, **kwargs: object) -> JsonValue:
+    async def execute(
+        self,
+        pattern: str = "",
+        path: str = "",
+        include: str | None = None,
+        **kwargs: object,
+    ) -> JsonValue:
+        """Search files matching pattern and return matching lines."""
         import re
+
         try:
             root = Path(path).resolve()
             if not root.is_dir():

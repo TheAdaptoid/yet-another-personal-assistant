@@ -18,9 +18,7 @@ def openrouter_provider(mock_openai_client):
     ):
         provider = OpenRouterProvider(
             config=Config(
-                provider_configs={
-                    "openrouter": ProviderConfig(api_key="sk-or-test")
-                }
+                provider_configs={"openrouter": ProviderConfig(api_key="sk-or-test")}
             )
         )
     provider._client = mock_openai_client
@@ -111,9 +109,7 @@ class TestOpenRouterModelList:
         assert gpt4o.context_length == 128000
         assert gpt4o.max_output == 16384
 
-    async def test_populates_pricing(
-        self, openrouter_provider, mock_or_httpx_get
-    ):
+    async def test_populates_pricing(self, openrouter_provider, mock_or_httpx_get):
         models = await openrouter_provider._list_models_impl()
         gpt4o = models[0]
         assert gpt4o.pricing is not None
@@ -136,12 +132,8 @@ class TestOpenRouterModelList:
         assert embed.type == ModelType.OTHER
         assert embed.pricing is None
 
-    async def test_filters_by_model_type(
-        self, openrouter_provider, mock_or_httpx_get
-    ):
-        llms = await openrouter_provider._list_models_impl(
-            model_type=ModelType.LLM
-        )
+    async def test_filters_by_model_type(self, openrouter_provider, mock_or_httpx_get):
+        llms = await openrouter_provider._list_models_impl(model_type=ModelType.LLM)
         assert len(llms) == 2
 
     async def test_get_model_impl_returns_from_list(

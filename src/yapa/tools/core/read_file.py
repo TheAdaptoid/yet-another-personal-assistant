@@ -6,10 +6,17 @@ from yapa.tools.base import JsonValue, Tool
 
 
 class ReadFile(Tool):
+    """Read file contents with optional offset and limit."""
+
     def __init__(self):
+        """Configure the read_file tool with path, offset, and limit parameters."""
         super().__init__(
             name="read_file",
-            description="Read the contents of a file. Can optionally specify offset (1-indexed line) and limit (max lines).",
+            description=(
+                "Read the contents of a file. "
+                "Can optionally specify offset (1-indexed line) "
+                "and limit (max lines)."
+            ),
             parameters={
                 "type": "object",
                 "properties": {
@@ -31,7 +38,14 @@ class ReadFile(Tool):
             needs_approval=False,
         )
 
-    async def execute(self, path: str = "", offset: int | None = None, limit: int | None = None, **kwargs: object) -> JsonValue:
+    async def execute(
+        self,
+        path: str = "",
+        offset: int | None = None,
+        limit: int | None = None,
+        **kwargs: object,
+    ) -> JsonValue:
+        """Read file content with optional range."""
         try:
             p = Path(path).resolve()
             lines = p.read_text().splitlines(keepends=True)

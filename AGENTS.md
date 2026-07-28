@@ -108,7 +108,12 @@ internal `AsyncGenerator[Event]` in `ChatService.stream()`.
 - ruff ignores D100-D104, D107 in test files; docstrings required elsewhere
 - ty skips `tests/` entirely
 
-## Constraint
+## Commits
 
-Do not add SQLite/sqlmodel dependencies. This is a Phase 2+ feature, not
-current scope.
+- Start commit messages with one of these prefixes: `feat:`, `fix:`, `refactor:`, `test:`, `docs:`
+
+## Documentation
+
+- All specs and design docs should be in `docs/specs/`
+- All implementation plans should be in `docs/plans/`
+- All user-facing documentation should be in `docs/references/`

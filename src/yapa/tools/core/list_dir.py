@@ -6,10 +6,16 @@ from yapa.tools.base import JsonValue, Tool
 
 
 class ListDir(Tool):
+    """List files and directories in a path."""
+
     def __init__(self):
+        """Configure the list_dir tool with path parameter schema."""
         super().__init__(
             name="list_dir",
-            description="List files and directories in a path. Shows names, types (file/dir), and sizes.",
+            description=(
+                "List files and directories in a path. "
+                "Shows names, types (file/dir), and sizes."
+            ),
             parameters={
                 "type": "object",
                 "properties": {
@@ -24,6 +30,7 @@ class ListDir(Tool):
         )
 
     async def execute(self, path: str = "", **kwargs: object) -> JsonValue:
+        """List directory entries with type and size."""
         try:
             p = Path(path).resolve()
             if not p.is_dir():

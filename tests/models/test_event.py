@@ -2,8 +2,6 @@
 
 from datetime import datetime
 
-import pytest
-
 from yapa.models.event import (
     AgentDoneEvent,
     AgentErrorEvent,

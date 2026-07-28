@@ -25,9 +25,7 @@ class TestOpenAIIPInit:
             OpenAIIP(config=config)
 
     def test_initializes_with_valid_key(self, mock_openai_client) -> None:
-        config = Config(
-            provider_configs={"openai": ProviderConfig(api_key="sk-test")}
-        )
+        config = Config(provider_configs={"openai": ProviderConfig(api_key="sk-test")})
         with patch(
             "yapa.providers.openai_compat.AsyncOpenAI", return_value=mock_openai_client
         ) as mock_client:
@@ -72,9 +70,7 @@ class TestOllamaIPInit:
     """Tests for OllamaIP constructor."""
 
     def test_initializes_with_config(self, mock_openai_client) -> None:
-        config = Config(
-            provider_configs={"ollama": ProviderConfig(api_key="test-key")}
-        )
+        config = Config(provider_configs={"ollama": ProviderConfig(api_key="test-key")})
         with patch(
             "yapa.providers.openai_compat.AsyncOpenAI", return_value=mock_openai_client
         ) as mock_client:

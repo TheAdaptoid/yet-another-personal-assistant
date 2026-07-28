@@ -1,6 +1,5 @@
 """Tests for SessionStore protocol and JsonSessionStore."""
 
-
 import pytest
 
 from yapa.models import AssistantMessage, InferenceParams, Session, UserMessage

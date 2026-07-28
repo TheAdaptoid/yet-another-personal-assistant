@@ -4,10 +4,16 @@ from yapa.tools.base import JsonValue, Tool
 
 
 class Calculator(Tool):
+    """Evaluate mathematical expressions safely."""
+
     def __init__(self):
+        """Configure the calculator tool with expression parameter schema."""
         super().__init__(
             name="calculator",
-            description="Evaluate a mathematical expression. Supports +, -, *, /, **, //, % and parentheses.",
+            description=(
+                "Evaluate a mathematical expression. "
+                "Supports +, -, *, /, **, //, % and parentheses."
+            ),
             parameters={
                 "type": "object",
                 "properties": {
@@ -22,6 +28,7 @@ class Calculator(Tool):
         )
 
     async def execute(self, expression: str = "", **kwargs: object) -> JsonValue:
+        """Evaluate the expression and return the result."""
         allowed = {"__builtins__": {}}
         return eval(expression, allowed, {})
 

@@ -1,27 +1,20 @@
 """Tests for ChatService agentic loop."""
 
 from unittest.mock import MagicMock
-from uuid import uuid4
 
 import pytest
 
 from yapa.models import (
-    AssistantMessage,
-    InferenceParams,
     ModelData,
     ModelType,
     StreamDelta,
     TokenUsage,
     ToolCallDelta,
-    ToolMessage,
     UserMessage,
 )
 from yapa.models.event import (
     AgentDoneEvent,
     AgentErrorEvent,
-    AgentStartEvent,
-    TextEvent,
-    ToolApprovalRequestEvent,
     ToolCallEvent,
     ToolResultEvent,
 )
@@ -36,11 +29,16 @@ from yapa.tools.registry import ToolRegistry
 
 class ToolThatReturns(Tool):
     """Tool that returns a fixed result."""
+
     def __init__(self, name="echo", result="tool_result", needs_approval=False):
         super().__init__(
             name=name,
             description="Echo tool",
-            parameters={"type": "object", "properties": {"input": {"type": "string"}}, "required": ["input"]},
+            parameters={
+                "type": "object",
+                "properties": {"input": {"type": "string"}},
+                "required": ["input"],
+            },
             needs_approval=needs_approval,
         )
         self._result = result
@@ -97,7 +95,11 @@ class TestToolLoop:
         provider = models.get_provider_by_model.return_value
 
         async def _stream(model, messages, tools=None, params=None):
-            yield StreamDelta(content="Hello", finish_reason="stop", usage=TokenUsage(prompt_tokens=1, completion_tokens=1, total_tokens=2))
+            yield StreamDelta(
+                content="Hello",
+                finish_reason="stop",
+                usage=TokenUsage(prompt_tokens=1, completion_tokens=1, total_tokens=2),
+            )
 
         provider.stream_chat.side_effect = _stream
 
@@ -121,7 +123,14 @@ class TestToolLoop:
             call_count += 1
             if call_count == 1:
                 yield StreamDelta(
-                    tool_calls=[ToolCallDelta(index=0, id="call_1", name="echo", arguments='{"input": "hi"}')],
+                    tool_calls=[
+                        ToolCallDelta(
+                            index=0,
+                            id="call_1",
+                            name="echo",
+                            arguments='{"input": "hi"}',
+                        )
+                    ],
                     finish_reason="tool_calls",
                 )
             else:
@@ -143,12 +152,20 @@ class TestToolLoop:
         provider = models.get_provider_by_model.return_value
 
         call_count = 0
+
         async def _stream(model, messages, tools=None, params=None):
             nonlocal call_count
             call_count += 1
             if call_count == 1:
                 yield StreamDelta(
-                    tool_calls=[ToolCallDelta(index=0, id="call_1", name="echo", arguments='{"input": "hi"}')],
+                    tool_calls=[
+                        ToolCallDelta(
+                            index=0,
+                            id="call_1",
+                            name="echo",
+                            arguments='{"input": "hi"}',
+                        )
+                    ],
                     finish_reason="tool_calls",
                 )
             else:
@@ -170,12 +187,20 @@ class TestToolLoop:
         provider = models.get_provider_by_model.return_value
 
         call_count = 0
+
         async def _stream(model, messages, tools=None, params=None):
             nonlocal call_count
             call_count += 1
             if call_count == 1:
                 yield StreamDelta(
-                    tool_calls=[ToolCallDelta(index=0, id="call_1", name="echo", arguments='{"input": "hi"}')],
+                    tool_calls=[
+                        ToolCallDelta(
+                            index=0,
+                            id="call_1",
+                            name="echo",
+                            arguments='{"input": "hi"}',
+                        )
+                    ],
                     finish_reason="tool_calls",
                 )
             else:
@@ -192,7 +217,7 @@ class TestToolLoop:
         assert result_events[0].tool_name == "echo"
 
     async def test_dangerous_tool_requests_approval(self, chat, sessions, models):
-        """Tool with needs_approval=True yields ToolApprovalRequestEvent and awaits callback."""
+        """Tool with needs_approval=True requests approval and awaits callback."""
         session = sessions.create()
         provider = models.get_provider_by_model.return_value
         # Replace registry with a dangerous tool
@@ -200,12 +225,17 @@ class TestToolLoop:
         chat._tools = ToolRegistry([dangerous])
 
         call_count = 0
+
         async def _stream(model, messages, tools=None, params=None):
             nonlocal call_count
             call_count += 1
             if call_count == 1:
                 yield StreamDelta(
-                    tool_calls=[ToolCallDelta(index=0, id="call_1", name="dangerous", arguments='{}')],
+                    tool_calls=[
+                        ToolCallDelta(
+                            index=0, id="call_1", name="dangerous", arguments="{}"
+                        )
+                    ],
                     finish_reason="tool_calls",
                 )
             else:
@@ -214,13 +244,16 @@ class TestToolLoop:
         provider.stream_chat.side_effect = _stream
 
         approved = False
+
         async def get_approval(req: ToolApprovalRequest) -> ToolApprovalResponse:
             nonlocal approved
             approved = True
             return ToolApprovalResponse(call_id=req.call_id, approved=True)
 
         events = []
-        async for e in chat.stream(session_id=session.id, prompt="Hi", model=model, get_approval=get_approval):
+        async for e in chat.stream(
+            session_id=session.id, prompt="Hi", model=model, get_approval=get_approval
+        ):
             events.append(e)
 
         assert approved
@@ -242,7 +275,11 @@ class TestToolLoop:
             prompts_seen.append(len(messages))
             if call_count == 1:
                 yield StreamDelta(
-                    tool_calls=[ToolCallDelta(index=0, id="call_1", name="dangerous", arguments='{}')],
+                    tool_calls=[
+                        ToolCallDelta(
+                            index=0, id="call_1", name="dangerous", arguments="{}"
+                        )
+                    ],
                     finish_reason="tool_calls",
                 )
             else:
@@ -251,10 +288,14 @@ class TestToolLoop:
         provider.stream_chat.side_effect = _stream
 
         async def get_approval(req):
-            return ToolApprovalResponse(call_id=req.call_id, approved=False, reason="not now")
+            return ToolApprovalResponse(
+                call_id=req.call_id, approved=False, reason="not now"
+            )
 
         events = []
-        async for e in chat.stream(session_id=session.id, prompt="Hi", model=model, get_approval=get_approval):
+        async for e in chat.stream(
+            session_id=session.id, prompt="Hi", model=model, get_approval=get_approval
+        ):
             events.append(e)
 
         assert provider.stream_chat.call_count == 2
@@ -267,12 +308,17 @@ class TestToolLoop:
         provider = models.get_provider_by_model.return_value
 
         call_count = 0
+
         async def _stream(model, messages, tools=None, params=None):
             nonlocal call_count
             call_count += 1
             if call_count == 1:
                 yield StreamDelta(
-                    tool_calls=[ToolCallDelta(index=0, id="call_1", name="nonexistent", arguments='{}')],
+                    tool_calls=[
+                        ToolCallDelta(
+                            index=0, id="call_1", name="nonexistent", arguments="{}"
+                        )
+                    ],
                     finish_reason="tool_calls",
                 )
             else:
@@ -293,12 +339,17 @@ class TestToolLoop:
         chat._tools = ToolRegistry([ToolThatRaises()])
 
         call_count = 0
+
         async def _stream(model, messages, tools=None, params=None):
             nonlocal call_count
             call_count += 1
             if call_count == 1:
                 yield StreamDelta(
-                    tool_calls=[ToolCallDelta(index=0, id="call_1", name="failing", arguments='{}')],
+                    tool_calls=[
+                        ToolCallDelta(
+                            index=0, id="call_1", name="failing", arguments="{}"
+                        )
+                    ],
                     finish_reason="tool_calls",
                 )
             else:
@@ -319,7 +370,11 @@ class TestToolLoop:
 
         async def _stream(model, messages, tools=None, params=None):
             yield StreamDelta(
-                tool_calls=[ToolCallDelta(index=0, id="call_1", name="echo", arguments='{"input": "x"}')],
+                tool_calls=[
+                    ToolCallDelta(
+                        index=0, id="call_1", name="echo", arguments='{"input": "x"}'
+                    )
+                ],
                 finish_reason="tool_calls",
             )
 
@@ -334,17 +389,25 @@ class TestToolLoop:
         assert provider.stream_chat.call_count == ChatService.MAX_ITERATIONS
 
     async def test_persists_messages_only_once(self, chat, sessions, models):
-        """Messages are persisted only when the loop terminates, not on each iteration."""
+        """Messages are persisted only when the loop terminates, not per iteration."""
         session = sessions.create()
         provider = models.get_provider_by_model.return_value
 
         call_count = 0
+
         async def _stream(model, messages, tools=None, params=None):
             nonlocal call_count
             call_count += 1
             if call_count == 1:
                 yield StreamDelta(
-                    tool_calls=[ToolCallDelta(index=0, id="call_1", name="echo", arguments='{"input": "x"}')],
+                    tool_calls=[
+                        ToolCallDelta(
+                            index=0,
+                            id="call_1",
+                            name="echo",
+                            arguments='{"input": "x"}',
+                        )
+                    ],
                     finish_reason="tool_calls",
                 )
             else:

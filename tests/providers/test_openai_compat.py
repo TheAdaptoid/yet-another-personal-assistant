@@ -237,9 +237,7 @@ class TestExtractReasoningContent:
         assert compat_provider._extract_reasoning_content(obj) == "thinking..."
 
     def test_both_prioritizes_reasoning(self, compat_provider) -> None:
-        obj = SimpleNamespace(
-            reasoning="old", reasoning_content="new"
-        )
+        obj = SimpleNamespace(reasoning="old", reasoning_content="new")
         assert compat_provider._extract_reasoning_content(obj) == "old"
 
     def test_empty_string_returns_none(self, compat_provider) -> None:
@@ -345,9 +343,7 @@ class TestStreamChatImpl:
         assert results[0].reasoning_content == "thinking..."
 
     async def test_yields_tool_call_deltas(self, compat_provider) -> None:
-        tc1 = _TC(
-            index=0, id="call_1", name="get_weather", arguments='{"loc":"SF"}'
-        )
+        tc1 = _TC(index=0, id="call_1", name="get_weather", arguments='{"loc":"SF"}')
         stream = _stream(
             _chunk(content=None, reasoning_content=None, tool_calls=[tc1]),
         )
@@ -404,9 +400,7 @@ class TestStreamChatImpl:
         assert results[0].finish_reason == "stop"
 
     async def test_yields_usage(self, compat_provider) -> None:
-        usage = SimpleNamespace(
-            prompt_tokens=10, completion_tokens=20, total_tokens=30
-        )
+        usage = SimpleNamespace(prompt_tokens=10, completion_tokens=20, total_tokens=30)
         chunk = _chunk(content="done", reasoning_content=None, usage=usage)
         stream = _stream(chunk)
         mock_create = AsyncMock(return_value=stream)
@@ -583,9 +577,7 @@ class TestStaticChatImpl:
         assert result.content is None
 
     async def test_returns_usage(self, compat_provider) -> None:
-        usage = SimpleNamespace(
-            prompt_tokens=10, completion_tokens=20, total_tokens=30
-        )
+        usage = SimpleNamespace(prompt_tokens=10, completion_tokens=20, total_tokens=30)
         response = self._make_response(content="Hello", usage=usage)
         mock_create = AsyncMock(return_value=response)
         compat_provider._client.chat.completions.create = mock_create

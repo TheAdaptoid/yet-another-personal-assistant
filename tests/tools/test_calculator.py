@@ -1,4 +1,5 @@
 import pytest
+
 from yapa.tools.core.calculator import calculator
 
 

@@ -6,10 +6,17 @@ from yapa.tools.base import JsonValue, Tool
 
 
 class WriteFile(Tool):
+    """Write content to a file at the specified path."""
+
     def __init__(self):
+        """Configure the write_file tool with path and content parameters."""
         super().__init__(
             name="write_file",
-            description="Write content to a file at the specified path. The parent directory must already exist. Overwrites existing files.",
+            description=(
+                "Write content to a file at the specified path. "
+                "The parent directory must already exist. "
+                "Overwrites existing files."
+            ),
             parameters={
                 "type": "object",
                 "properties": {
@@ -27,7 +34,10 @@ class WriteFile(Tool):
             needs_approval=True,
         )
 
-    async def execute(self, path: str = "", content: str = "", **kwargs: object) -> JsonValue:
+    async def execute(
+        self, path: str = "", content: str = "", **kwargs: object
+    ) -> JsonValue:
+        """Write content to file, error if parent does not exist."""
         try:
             p = Path(path).resolve()
             if not p.parent.exists():

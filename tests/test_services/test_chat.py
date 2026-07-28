@@ -86,9 +86,7 @@ class TestStream:
         assert events[3].usage is not None
         assert events[3].usage.total_tokens == 8
 
-    async def test_persists_user_and_assistant_messages(
-        self, chat, sessions, models
-    ):
+    async def test_persists_user_and_assistant_messages(self, chat, sessions, models):
         session = sessions.create()
         provider = models.get_provider_by_model.return_value
 
@@ -205,9 +203,7 @@ class TestStream:
     async def test_uses_session_model_as_fallback(self, chat, sessions, models):
         session = sessions.create()
         # Manually set model on session (simulating previous stream)
-        session.model = ModelData(
-            id="gpt-4", provider_id="openai", type=ModelType.LLM
-        )
+        session.model = ModelData(id="gpt-4", provider_id="openai", type=ModelType.LLM)
         sessions._store.save(session, overwrite=True)
         provider = models.get_provider_by_model.return_value
 
@@ -226,9 +222,7 @@ class TestStream:
             ModelData(id="gpt-4", provider_id="openai", type=ModelType.LLM)
         )
 
-    async def test_saves_model_to_session_after_stream(
-        self, chat, sessions, models
-    ):
+    async def test_saves_model_to_session_after_stream(self, chat, sessions, models):
         session = sessions.create()
         provider = models.get_provider_by_model.return_value
 
@@ -284,14 +278,10 @@ class TestStream:
         provider.stream_chat.side_effect = _stream
         model = ModelData(id="gpt-4", provider_id="openai", type=ModelType.LLM)
 
-        async for _ in chat.stream(
-            session_id=session.id, prompt="First", model=model
-        ):
+        async for _ in chat.stream(session_id=session.id, prompt="First", model=model):
             pass
 
-        async for _ in chat.stream(
-            session_id=session.id, prompt="Second", model=model
-        ):
+        async for _ in chat.stream(session_id=session.id, prompt="Second", model=model):
             pass
 
         loaded = sessions.get(str(session.id))
