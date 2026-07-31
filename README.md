@@ -158,6 +158,6 @@ src/yapa/
   providers/   # Provider ABC + implementations (OpenAI, OpenRouter,
                # LM Studio, Ollama)
   services/    # Business logic with protocol-based dependency injection
-  storage/     # GenericStore — JSON file persistence
+  storage/     # GenericJSONStore — JSON file persistence
   tools/       # Tool abstractions (not yet integrated into ChatService)
 ```

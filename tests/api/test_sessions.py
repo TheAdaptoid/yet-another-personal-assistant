@@ -19,14 +19,17 @@ def _make_session(**overrides) -> Session:
 
 def test_list_sessions_empty(client, mock_session_service):
     mock_session_service.list.return_value = []
+    mock_session_service.count.return_value = 0
     response = client.get("/api/v1/sessions")
     assert response.status_code == 200
     assert response.json() == []
+    assert response.headers["x-total-count"] == "0"
 
 
 def test_list_sessions_with_pagination(client, mock_session_service):
     sessions = [_make_session(title=f"Session {i}") for i in range(5)]
     mock_session_service.list.return_value = sessions
+    mock_session_service.count.return_value = 5
 
     response_page_1 = client.get("/api/v1/sessions?page=1&per_page=2")
     assert response_page_1.status_code == 200
@@ -34,30 +37,36 @@ def test_list_sessions_with_pagination(client, mock_session_service):
     assert len(data_page_1) == 2
     assert data_page_1[0]["title"] == "Session 0"
     assert data_page_1[1]["title"] == "Session 1"
+    assert response_page_1.headers["x-total-count"] == "5"
 
     response_page_3 = client.get("/api/v1/sessions?page=3&per_page=2")
     assert response_page_3.status_code == 200
     data_page_3 = response_page_3.json()
     assert len(data_page_3) == 1
     assert data_page_3[0]["title"] == "Session 4"
+    assert response_page_3.headers["x-total-count"] == "5"
 
 
-def test_list_sessions_defaults_to_per_page_20(client, mock_session_service):
+def test_list_sessions_defaults_to_per_page_10(client, mock_session_service):
     sessions = [_make_session(title=f"Session {i}") for i in range(25)]
     mock_session_service.list.return_value = sessions
+    mock_session_service.count.return_value = 25
 
     response = client.get("/api/v1/sessions")
     assert response.status_code == 200
-    assert len(response.json()) == 20
+    assert len(response.json()) == 10
+    assert response.headers["x-total-count"] == "25"
 
 
 def test_list_sessions_per_page_max_100(client, mock_session_service):
     sessions = [_make_session(title=f"Session {i}") for i in range(150)]
     mock_session_service.list.return_value = sessions
+    mock_session_service.count.return_value = 150
 
     response = client.get("/api/v1/sessions?per_page=200")
     assert response.status_code == 200
     assert len(response.json()) == 100
+    assert response.headers["x-total-count"] == "150"
 
 
 def test_create_session(client, mock_session_service):

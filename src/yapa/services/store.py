@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 from yapa.models import Session
-from yapa.storage import GenericStore
+from yapa.storage import GenericJSONStore
 
 
 @runtime_checkable
@@ -23,13 +23,19 @@ class SessionStore(Protocol):
     def delete(self, id: str) -> None:
         """Delete a session by ID."""
 
+    def exists(self, id: str) -> bool:
+        """Check if a session exists."""
+
+    def count(self) -> int:
+        """Return the total number of sessions."""
+
 
 class JsonSessionStore:
-    """JSON-file-backed session store wrapping GenericStore."""
+    """JSON-file-backed session store wrapping GenericJSONStore."""
 
     def __init__(self, storage_dir: Path) -> None:
         """Initialize the JSON session store."""
-        self._store = GenericStore[Session](
+        self._store = GenericJSONStore[Session](
             storage_dir=Path(storage_dir),
             entity_type=Session,
         )
@@ -49,3 +55,11 @@ class JsonSessionStore:
     def delete(self, id: str) -> None:
         """Delete a session by ID."""
         self._store.delete(id)
+
+    def exists(self, id: str) -> bool:
+        """Check if a session exists."""
+        return self._store.exists(id)
+
+    def count(self) -> int:
+        """Return the total number of sessions."""
+        return self._store.count()

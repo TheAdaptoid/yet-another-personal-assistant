@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from yapa.models import Session
-from yapa.storage import GenericStore
+from yapa.storage import GenericJSONStore
 
 
 @pytest.fixture
@@ -16,8 +16,8 @@ def store_dir(tmp_path):
 
 @pytest.fixture
 def store(store_dir):
-    """Return a GenericStore backed by the temp directory."""
-    return GenericStore(store_dir, Session)
+    """Return a GenericJSONStore backed by the temp directory."""
+    return GenericJSONStore(store_dir, Session)
 
 
 @pytest.fixture

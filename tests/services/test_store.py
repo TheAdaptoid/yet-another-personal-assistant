@@ -103,3 +103,24 @@ class TestJsonSessionStore:
         store.save(session)
         assert nested.exists()
         assert (nested / f"{session.id}.json").exists()
+
+    def test_exists_returns_true(self, tmp_path):
+        store = JsonSessionStore(storage_dir=tmp_path)
+        session = Session()
+        store.save(session)
+        assert store.exists(str(session.id))
+
+    def test_exists_returns_false(self, tmp_path):
+        store = JsonSessionStore(storage_dir=tmp_path)
+        assert not store.exists("nonexistent")
+
+    def test_count_empty(self, tmp_path):
+        store = JsonSessionStore(storage_dir=tmp_path)
+        assert store.count() == 0
+
+    def test_count_after_saves(self, tmp_path):
+        store = JsonSessionStore(storage_dir=tmp_path)
+        store.save(Session())
+        store.save(Session())
+        store.save(Session())
+        assert store.count() == 3

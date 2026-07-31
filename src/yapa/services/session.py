@@ -19,6 +19,10 @@ class SessionService:
         self._store.save(session)
         return session
 
+    def count(self) -> int:
+        """Return the total number of sessions."""
+        return self._store.count()
+
     def list(self, *, newest_first: bool = True) -> List[Session]:
         """List all sessions, newest first by default."""
         sessions = self._store.list()
@@ -84,7 +88,6 @@ class SessionService:
 
     def delete(self, session_id: str) -> None:
         """Delete a session."""
-        try:
-            self._store.delete(session_id)
-        except FileNotFoundError as e:
-            raise ValueError(str(e)) from e
+        if not self._store.exists(session_id):
+            raise ValueError(f"Session '{session_id}' not found")
+        self._store.delete(session_id)

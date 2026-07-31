@@ -1,10 +1,10 @@
 """Storage module — generic entity persistence via JSON files."""
 
 from .exceptions import StorageDeleteError, StorageReadError, StorageWriteError
-from .store import GenericStore
+from .json_store import GenericJSONStore
 
 __all__ = [
-    "GenericStore",
+    "GenericJSONStore",
     "StorageDeleteError",
     "StorageReadError",
     "StorageWriteError",

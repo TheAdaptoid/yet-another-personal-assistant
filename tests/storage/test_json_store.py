@@ -1,4 +1,4 @@
-"""Tests for GenericStore."""
+"""Tests for GenericJSONStore."""
 
 from __future__ import annotations
 
@@ -8,22 +8,27 @@ import unittest.mock
 import pytest
 
 from yapa.models import AssistantMessage, Session, SystemMessage, UserMessage
-from yapa.storage import GenericStore, StorageReadError, StorageWriteError
+from yapa.storage import (
+    GenericJSONStore,
+    StorageDeleteError,
+    StorageReadError,
+    StorageWriteError,
+)
 
 
 class TestInit:
-    """Tests for GenericStore.__init__()."""
+    """Tests for GenericJSONStore.__init__()."""
 
     def test_creates_directory(self, store_dir):
         """Should create the storage directory if it does not exist."""
         target = store_dir / "sub"
-        GenericStore(target, Session)
+        GenericJSONStore(target, Session)
         assert target.is_dir()
 
     def test_creates_nested_directory(self, store_dir):
         """Should create intermediate directories with parents=True."""
         target = store_dir / "a" / "b" / "c"
-        GenericStore(target, Session)
+        GenericJSONStore(target, Session)
         assert target.is_dir()
 
     def test_existing_directory_not_removed(self, store_dir):
@@ -31,12 +36,12 @@ class TestInit:
         store_dir.mkdir(parents=True, exist_ok=True)
         marker = store_dir / "keep_me.txt"
         marker.write_text("hello")
-        GenericStore(store_dir, Session)
+        GenericJSONStore(store_dir, Session)
         assert marker.exists()
 
 
 class TestSave:
-    """Tests for GenericStore.save()."""
+    """Tests for GenericJSONStore.save()."""
 
     def test_save_creates_json_file(self, store, store_dir):
         """Should create a .json file named after the entity ID."""
@@ -88,7 +93,7 @@ class TestSave:
 
 
 class TestLoad:
-    """Tests for GenericStore.load()."""
+    """Tests for GenericJSONStore.load()."""
 
     def test_load_returns_saved_entity(self, store, make_session):
         """Should return the entity matching the given ID."""
@@ -136,7 +141,7 @@ class TestLoad:
 
 
 class TestList:
-    """Tests for GenericStore.list()."""
+    """Tests for GenericJSONStore.list()."""
 
     def test_list_empty_dir_returns_empty(self, store):
         """Should return an empty list when no files exist."""
@@ -177,7 +182,7 @@ class TestList:
 
 
 class TestDelete:
-    """Tests for GenericStore.delete()."""
+    """Tests for GenericJSONStore.delete()."""
 
     def test_delete_removes_file(self, store, store_dir, make_session):
         """Should remove the .json file from disk."""
@@ -206,6 +211,49 @@ class TestDelete:
         new = Session(title="new")
         store.save(new)
         assert store.load(new.id).title == "new"
+
+    def test_delete_failure_raises_storage_delete_error(self, store, make_session):
+        """Should raise StorageDeleteError when unlink fails."""
+        session = make_session()
+        with pytest.raises(StorageDeleteError):
+            with unittest.mock.patch(
+                "pathlib.Path.unlink", side_effect=OSError("read-only")
+            ):
+                store.delete(session.id)
+
+
+class TestExists:
+    """Tests for GenericJSONStore.exists()."""
+
+    def test_exists_returns_true_for_saved_entity(self, store, make_session):
+        """Should return True when the entity exists."""
+        session = make_session()
+        assert store.exists(session.id)
+
+    def test_exists_returns_false_for_missing_entity(self, store):
+        """Should return False when the entity does not exist."""
+        assert not store.exists("nonexistent-id")
+
+
+class TestCount:
+    """Tests for GenericJSONStore.count()."""
+
+    def test_count_empty_returns_zero(self, store):
+        """Should return 0 when no entities exist."""
+        assert store.count() == 0
+
+    def test_count_matches_saved_entities(self, store, make_session):
+        """Should return the number of saved entities."""
+        for i in range(5):
+            make_session(title=f"session-{i}")
+        assert store.count() == 5
+
+    def test_count_ignores_non_json_files(self, store, store_dir, make_session):
+        """Should only count .json files."""
+        make_session(title="real")
+        (store_dir / "notes.txt").write_text("ignored")
+        (store_dir / "backup.tmp").write_text("also ignored")
+        assert store.count() == 1
 
 
 class TestRoundTrip:
