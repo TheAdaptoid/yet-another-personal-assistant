@@ -58,7 +58,7 @@ uv run ty check src/
 
 ```bash
 uv run pytest tests/ -v                # full suite
-uv run pytest tests/test_services/ -v  # service tests only
+uv run pytest tests/services/ -v         # service tests only
 uv run pytest tests/providers/ -v      # provider tests only
 uv run pytest tests/models/ -v         # model tests only
 uv run pytest tests/storage/ -v        # storage tests only
@@ -99,7 +99,7 @@ src/yapa/
                # LM Studio, Ollama).
   services/    # Business logic with protocol-based dependency
                # injection.
-  storage/     # GenericStore for JSON file persistence.
+  storage/     # GenericJSONStore for JSON file persistence.
   tools/       # Tool abstractions (not yet integrated).
 ```
 

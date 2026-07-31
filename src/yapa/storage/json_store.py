@@ -17,12 +17,12 @@ logger = get_logger(__name__)
 TE = TypeVar("TE", bound=TrackedEntity)
 
 
-class GenericStore(Generic[TE]):
-    """A generic store for managing entities of a specific type."""
+class GenericJSONStore(Generic[TE]):
+    """A generic JSON store for managing entities of a specific type."""
 
     def __init__(self, storage_dir: Path, entity_type: type[TE]):
         """
-        Initialize the GenericStore.
+        Initialize the GenericJSONStore.
 
         Args:
             storage_dir: The directory to store the entities in.

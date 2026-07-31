@@ -12,7 +12,7 @@ uv run pytest tests/cli/ -v                     # CLI tests only
 uv run pytest tests/providers/ -v               # provider tests only
 uv run pytest tests/models/ -v                  # model tests only
 uv run pytest tests/storage/ -v                 # storage tests only
-uv run pytest tests/test_services/ -v           # services tests only
+uv run pytest tests/services/ -v           # services tests only
 uv run pytest tests/ -k "test_name"             # single test
 uv run ruff check src/ tests/                   # lint (F, E, I, C90, D)
 uv run ruff format src/ tests/                  # auto-format
@@ -32,7 +32,7 @@ src/yapa/
   models/       # Pydantic v2: Session, Message (discriminated union), Event, InferenceParams
   providers/    # InferenceProvider ABC → OpenAICompatibleProvider ABC
   services/     # Business logic with protocol-based DI (ConfigStore, SessionStore)
-  storage/      # GenericStore — JSON file persistence, one file per entity
+  storage/      # GenericJSONStore — JSON file persistence, one file per entity
   tools/        # Tool ABC + ToolRegistry (not integrated into ChatService yet)
 ```
 
@@ -102,7 +102,7 @@ internal `AsyncGenerator[Event]` in `ChatService.stream()`.
 ## Testing quirks
 
 - `tests/providers/conftest.py` — autouse patch `yapa.providers.base.get_logger`
-- `tests/test_services/conftest.py` — autouse patch `yapa.services.models.get_logger`
+- `tests/services/conftest.py` — autouse patch `yapa.services.models.get_logger`
 - All provider tests use lightweight mocks (`AsyncMock`, `MagicMock`, `SimpleNamespace`)
 - Storage tests use `tmp_path` for isolated filesystem
 - ruff ignores D100-D104, D107 in test files; docstrings required elsewhere

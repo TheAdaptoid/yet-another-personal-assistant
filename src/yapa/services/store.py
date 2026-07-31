@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 from yapa.models import Session
-from yapa.storage import GenericStore
+from yapa.storage import GenericJSONStore
 
 
 @runtime_checkable
@@ -31,11 +31,11 @@ class SessionStore(Protocol):
 
 
 class JsonSessionStore:
-    """JSON-file-backed session store wrapping GenericStore."""
+    """JSON-file-backed session store wrapping GenericJSONStore."""
 
     def __init__(self, storage_dir: Path) -> None:
         """Initialize the JSON session store."""
-        self._store = GenericStore[Session](
+        self._store = GenericJSONStore[Session](
             storage_dir=Path(storage_dir),
             entity_type=Session,
         )

@@ -1,4 +1,4 @@
-"""Tests for GenericStore."""
+"""Tests for GenericJSONStore."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import pytest
 
 from yapa.models import AssistantMessage, Session, SystemMessage, UserMessage
 from yapa.storage import (
-    GenericStore,
+    GenericJSONStore,
     StorageDeleteError,
     StorageReadError,
     StorageWriteError,
@@ -17,18 +17,18 @@ from yapa.storage import (
 
 
 class TestInit:
-    """Tests for GenericStore.__init__()."""
+    """Tests for GenericJSONStore.__init__()."""
 
     def test_creates_directory(self, store_dir):
         """Should create the storage directory if it does not exist."""
         target = store_dir / "sub"
-        GenericStore(target, Session)
+        GenericJSONStore(target, Session)
         assert target.is_dir()
 
     def test_creates_nested_directory(self, store_dir):
         """Should create intermediate directories with parents=True."""
         target = store_dir / "a" / "b" / "c"
-        GenericStore(target, Session)
+        GenericJSONStore(target, Session)
         assert target.is_dir()
 
     def test_existing_directory_not_removed(self, store_dir):
@@ -36,12 +36,12 @@ class TestInit:
         store_dir.mkdir(parents=True, exist_ok=True)
         marker = store_dir / "keep_me.txt"
         marker.write_text("hello")
-        GenericStore(store_dir, Session)
+        GenericJSONStore(store_dir, Session)
         assert marker.exists()
 
 
 class TestSave:
-    """Tests for GenericStore.save()."""
+    """Tests for GenericJSONStore.save()."""
 
     def test_save_creates_json_file(self, store, store_dir):
         """Should create a .json file named after the entity ID."""
@@ -93,7 +93,7 @@ class TestSave:
 
 
 class TestLoad:
-    """Tests for GenericStore.load()."""
+    """Tests for GenericJSONStore.load()."""
 
     def test_load_returns_saved_entity(self, store, make_session):
         """Should return the entity matching the given ID."""
@@ -141,7 +141,7 @@ class TestLoad:
 
 
 class TestList:
-    """Tests for GenericStore.list()."""
+    """Tests for GenericJSONStore.list()."""
 
     def test_list_empty_dir_returns_empty(self, store):
         """Should return an empty list when no files exist."""
@@ -182,7 +182,7 @@ class TestList:
 
 
 class TestDelete:
-    """Tests for GenericStore.delete()."""
+    """Tests for GenericJSONStore.delete()."""
 
     def test_delete_removes_file(self, store, store_dir, make_session):
         """Should remove the .json file from disk."""
@@ -223,7 +223,7 @@ class TestDelete:
 
 
 class TestExists:
-    """Tests for GenericStore.exists()."""
+    """Tests for GenericJSONStore.exists()."""
 
     def test_exists_returns_true_for_saved_entity(self, store, make_session):
         """Should return True when the entity exists."""
@@ -236,7 +236,7 @@ class TestExists:
 
 
 class TestCount:
-    """Tests for GenericStore.count()."""
+    """Tests for GenericJSONStore.count()."""
 
     def test_count_empty_returns_zero(self, store):
         """Should return 0 when no entities exist."""
