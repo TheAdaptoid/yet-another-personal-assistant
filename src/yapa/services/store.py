@@ -23,6 +23,12 @@ class SessionStore(Protocol):
     def delete(self, id: str) -> None:
         """Delete a session by ID."""
 
+    def exists(self, id: str) -> bool:
+        """Check if a session exists."""
+
+    def count(self) -> int:
+        """Return the total number of sessions."""
+
 
 class JsonSessionStore:
     """JSON-file-backed session store wrapping GenericStore."""
@@ -49,3 +55,11 @@ class JsonSessionStore:
     def delete(self, id: str) -> None:
         """Delete a session by ID."""
         self._store.delete(id)
+
+    def exists(self, id: str) -> bool:
+        """Check if a session exists."""
+        return self._store.exists(id)
+
+    def count(self) -> int:
+        """Return the total number of sessions."""
+        return self._store.count()

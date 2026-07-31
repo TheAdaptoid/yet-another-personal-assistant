@@ -12,16 +12,18 @@ from ..dependencies import get_session_service
 router = APIRouter(tags=["sessions"])
 
 MAX_PER_PAGE = 100
-DEFAULT_PER_PAGE = 20
+DEFAULT_PER_PAGE = 10
 
 
 @router.get("/sessions", response_model=list[Session])
 async def list_sessions(
+    response: Response,
     page: int = 1,
     per_page: int = DEFAULT_PER_PAGE,
     session_service: SessionService = Depends(get_session_service),
 ):
     """List all sessions with pagination."""
+    response.headers["X-Total-Count"] = str(session_service.count())
     all_sessions = session_service.list(newest_first=True)
     per_page = min(per_page, MAX_PER_PAGE)
     start = (page - 1) * per_page
