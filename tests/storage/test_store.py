@@ -8,7 +8,12 @@ import unittest.mock
 import pytest
 
 from yapa.models import AssistantMessage, Session, SystemMessage, UserMessage
-from yapa.storage import GenericStore, StorageReadError, StorageWriteError
+from yapa.storage import (
+    GenericStore,
+    StorageDeleteError,
+    StorageReadError,
+    StorageWriteError,
+)
 
 
 class TestInit:
@@ -206,6 +211,49 @@ class TestDelete:
         new = Session(title="new")
         store.save(new)
         assert store.load(new.id).title == "new"
+
+    def test_delete_failure_raises_storage_delete_error(self, store, make_session):
+        """Should raise StorageDeleteError when unlink fails."""
+        session = make_session()
+        with pytest.raises(StorageDeleteError):
+            with unittest.mock.patch(
+                "pathlib.Path.unlink", side_effect=OSError("read-only")
+            ):
+                store.delete(session.id)
+
+
+class TestExists:
+    """Tests for GenericStore.exists()."""
+
+    def test_exists_returns_true_for_saved_entity(self, store, make_session):
+        """Should return True when the entity exists."""
+        session = make_session()
+        assert store.exists(session.id)
+
+    def test_exists_returns_false_for_missing_entity(self, store):
+        """Should return False when the entity does not exist."""
+        assert not store.exists("nonexistent-id")
+
+
+class TestCount:
+    """Tests for GenericStore.count()."""
+
+    def test_count_empty_returns_zero(self, store):
+        """Should return 0 when no entities exist."""
+        assert store.count() == 0
+
+    def test_count_matches_saved_entities(self, store, make_session):
+        """Should return the number of saved entities."""
+        for i in range(5):
+            make_session(title=f"session-{i}")
+        assert store.count() == 5
+
+    def test_count_ignores_non_json_files(self, store, store_dir, make_session):
+        """Should only count .json files."""
+        make_session(title="real")
+        (store_dir / "notes.txt").write_text("ignored")
+        (store_dir / "backup.tmp").write_text("also ignored")
+        assert store.count() == 1
 
 
 class TestRoundTrip:
