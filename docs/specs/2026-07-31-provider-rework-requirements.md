@@ -11,8 +11,8 @@ folded into the OpenAI provider; `InferenceProvider` and data models subject to
 change). It exists to guarantee that the defects identified in the provider code
 review (2026-07-31) do not persist in the new implementation.
 
-Architecture requirements (official clients, module layout, base-class contract)
-are intentionally out of scope for now and will be added to this spec incrementally.
+Architecture requirements — official clients, module layout, base-class contract,
+and the enriched data models — were added on 2026-08-01 (sections 12-16).
 
 ## How to read this spec
 
@@ -25,6 +25,9 @@ are intentionally out of scope for now and will be added to this spec incrementa
   binding; tests may live anywhere the implementation deems appropriate.
 - Method names used in requirements (e.g. `get_model`, `stream_chat`) refer to the
   current API and should be read as "or its equivalent in the new architecture".
+- Requirement IDs are prefixed by the module directory they concern:
+  `REQ-PROV-*` for `providers/`, `REQ-MODEL-*` for `models/`, `REQ-SERV-*` for
+  `services/`, `REQ-CLI-*` for `cli/`, `REQ-API-*` for `api/`.
 
 ## Traceability
 
@@ -326,10 +329,348 @@ retrieval, `ModelInvocationError` for chat — with tests for each call type.
 
 Test target: per-provider error-path tests.
 
+## 12. Architecture — Data models (`yapa/models/`)
+
+### REQ-MODEL-01 — ModelType MUST expose three distinct values
+
+`ModelType` MUST contain exactly `llm`, `embedding`, and `other` values.
+
+- AC1: `ModelType.LLM`, `ModelType.EMBED`, and `ModelType.OTHER` exist with
+  the values `"llm"`, `"embedding"`, `"other"`.
+- AC2: The API `model_type` query parameter and the CLI `--type` option accept
+  the `embedding` value.
+
+Test target: `tests/models/` — model type tests; `tests/api/`; `tests/cli/`.
+
+### REQ-MODEL-02 — Model data MUST be a discriminated hierarchy
+
+`ModelData` MUST be the base type carrying `id`, `provider_id`, `type`, `name`,
+and `description`. `LanguageModel` and `EmbedModel` MUST be subtypes
+discriminated by the `type` field. Parsing a model record MUST yield the
+correct subtype without explicit consumer dispatch.
+
+- AC1: A record with `type="llm"` parses as `LanguageModel`.
+- AC2: A record with `type="embedding"` parses as `EmbedModel`.
+- AC3: A record with `type="other"` parses as bare `ModelData`.
+- AC4: `name` and `description` default to `None` for every subtype when
+  absent.
+
+Test target: `tests/models/` — model data tests.
+
+### REQ-MODEL-03 — Pricing MUST be a structured model
+
+Pricing MUST be a Pydantic model (`ModelPricing`) with optional `input`,
+`output`, and `request` fields (USD per million tokens), each `None` when
+unknown.
+
+- AC1: Pricing serializes as a structured object, not a bare dict.
+- AC2: Unknown pricing fields default to `None` without error.
+- AC3: Unknown pricing on a model is represented as a `None` value, not an
+  empty object.
+
+Test target: `tests/models/` — pricing tests.
+
+### REQ-MODEL-04 — LanguageModel MUST carry LLM-specific capability fields
+
+`LanguageModel` MUST expose `context_length`, `max_output`, `supports_tools`,
+`supports_vision`, `supports_reasoning`, `reasoning_levels`,
+`supports_streaming`, and `pricing`.
+
+- AC1: All fields default safely (`None`/`False`/empty list) when absent.
+- AC2: `reasoning_levels` is a list of strings (e.g. `["low","medium","high"]`,
+  `["on","off"]`, or empty).
+
+Test target: `tests/models/` — language model tests.
+
+### REQ-MODEL-05 — EmbedModel MUST carry embedding-specific fields
+
+`EmbedModel` MUST expose `embedding_dimensions`, `normalized`, and `pricing`.
+
+- AC1: `embedding_dimensions` defaults to `None`; `normalized` defaults to
+  `False`.
+- AC2: An embedding model reports its native dimensions when the provider
+  API exposes them.
+
+Test target: `tests/models/` — embed model tests.
+
+### REQ-MODEL-06 — InferenceParams MUST be a curated typed set
+
+`InferenceParams` MUST contain the typed fields `temperature`, `max_tokens`,
+`top_p`, `presence_penalty`, `frequency_penalty`, `stop`, `seed`, `top_k`,
+`min_p`, `repeat_penalty`, and `reasoning_effort`. Every field MUST default to
+`None` and be omitted from API requests when unset (see REQ-PROV-14).
+
+- AC1: A params object with all fields unset serializes without those keys.
+- AC2: A params object with a subset set serializes only the set keys.
+- AC3: `stop` accepts a single string or a list of strings.
+
+Test target: `tests/models/` — inference params tests.
+
+### REQ-MODEL-07 — Reasoning effort MUST be a unified enum
+
+`ReasoningEffort` MUST contain `OFF`, `LOW`, `MEDIUM`, and `HIGH`. The mapping
+to each provider's request parameter MUST be:
+
+| Unified | OpenAI | OpenRouter | LM Studio | Ollama |
+|---|---|---|---|---|
+| `OFF` | omit | omit | `reasoning: "off"` | `think: false` |
+| `LOW` | `reasoning: {"effort": "low"}` | same | `reasoning: "low"` | `think: true` |
+| `MEDIUM` | `reasoning: {"effort": "medium"}` | same | `reasoning: "medium"` | `think: true` |
+| `HIGH` | `reasoning: {"effort": "high"}` | same | `reasoning: "high"` | `think: true` |
+| `None` | omit | omit | omit | omit |
+
+- AC1: Each provider maps every `ReasoningEffort` value per the table.
+- AC2: `None` produces no reasoning-related request parameter.
+
+Test target: per-provider request-building tests.
+
+### REQ-MODEL-08 — Message content MUST support text and image parts
+
+User message content MUST be `str | list[ContentPart]` where `ContentPart` is
+a discriminated union of `TextPart` and `ImagePart`. `ImagePart` MUST carry a
+`url` (http(s) or data URL) and an optional `detail` hint.
+
+- AC1: A plain string message parses unchanged.
+- AC2: A mixed text/image part list parses and round-trips through storage.
+- AC3: An unknown part type fails validation.
+
+Test target: `tests/models/` — message tests.
+
+### REQ-MODEL-09 — Embedding results MUST be a structured result
+
+`EmbeddingResult` MUST contain `vectors` (list of float lists aligned with the
+inputs), `model_id`, and optional `usage` (`TokenUsage`).
+
+- AC1: There is one vector per input, in input order.
+- AC2: `usage` is `None` when the provider does not report it.
+
+Test target: `tests/models/` — embedding result tests.
+
+### REQ-MODEL-10 — Session model MUST be typed as LanguageModel
+
+`Session.model` MUST be `LanguageModel | None`. A session record whose model
+is not an LLM MUST fail validation.
+
+- AC1: A session with an LLM model loads normally.
+- AC2: A session record with `type="embedding"` in `model` fails validation.
+
+Test target: `tests/models/` — session tests.
+
+### REQ-MODEL-11 — Streaming MUST emit a discriminated event union
+
+The provider streaming boundary MUST be `StreamEvent`, a discriminated union
+of `ContentDelta`, `ReasoningDelta`, `ToolCallDeltaEvent`, and `StreamEndEvent`
+keyed by a `type` discriminator.
+
+- AC1: Content deltas carry `content` only.
+- AC2: Reasoning deltas carry `content` only.
+- AC3: Tool-call deltas carry `index`, `id`, `name`, and `arguments`
+  (raw JSON fragments).
+- AC4: The union rejects unknown event types at construction.
+
+Test target: `tests/models/` — stream event tests.
+
+## 13. Architecture — Streaming contract (provider boundary)
+
+### REQ-PROV-21 — A stream MUST end with exactly one StreamEndEvent
+
+Every provider stream MUST emit exactly one `StreamEndEvent` as its final
+event. `finish_reason`, `usage`, and `model_id` MUST appear only on
+`StreamEndEvent`, never on content, reasoning, or tool-call deltas.
+
+- AC1: A stream of content chunks followed by a usage-only final chunk ends
+  with one `StreamEndEvent` carrying the usage and does not raise.
+- AC2: A stream without a usage chunk ends with one `StreamEndEvent` with
+  `usage=None` and the preserved `finish_reason`.
+- AC3: A mid-stream provider exception surfaces as `ModelInvocationError`
+  and no `StreamEndEvent` is emitted (error-wrapping does not regress).
+
+Test target: per-provider streaming tests; `tests/providers/test_base.py`.
+
+### REQ-PROV-22 — Stream events MUST NOT carry errors
+
+Errors during streaming MUST be raised as typed exceptions
+(`ModelInvocationError`); the `StreamEvent` union MUST contain no error event.
+
+- AC1: A provider API failure during streaming raises `ModelInvocationError`.
+- AC2: The union has exactly the four members of REQ-MODEL-11, none of which
+  is an error.
+
+Test target: per-provider streaming error tests.
+
+## 14. Architecture — Provider base class and module layout
+
+### REQ-PROV-23 — InferenceProvider MUST expose the full contract
+
+The base class MUST expose `list_models`, `get_model`, `stream_chat`,
+`static_chat`, and `embed`. Public methods MUST wrap private `_impl` methods
+with logging and error conversion.
+
+- AC1: Each public method logs at info level and wraps unexpected exceptions
+  into the documented typed error.
+- AC2: `embed` wraps failures as `ModelInvocationError` and never leaks
+  client-level exceptions.
+- AC3: `get_model`/`list_models` return the model subtypes of section 12 and
+  never fabricate data for unknown ids (REQ-PROV-08 does not regress).
+
+Test target: `tests/providers/test_base.py`.
+
+### REQ-PROV-24 — Invocation MUST guard model subtypes before network calls
+
+`stream_chat`/`static_chat` MUST reject non-`LanguageModel` arguments and
+`embed` MUST reject non-`EmbedModel` arguments with a typed error before any
+client call is made.
+
+- AC1: `stream_chat` with an `EmbedModel` raises a typed error; the client is
+  never called.
+- AC2: `embed` with a `LanguageModel` raises a typed error; the client is
+  never called.
+- AC3: Matching subtypes proceed normally.
+
+Test target: `tests/providers/test_base.py`; per-provider tests.
+
+### REQ-PROV-25 — Client strategy MUST follow the official SDKs
+
+OpenAI, OpenRouter, and LM Studio MUST use the official OpenAI SDK
+(`AsyncOpenAI`) for chat, streaming, embeddings, and model listing, with the
+configured `provider_timeout` and `provider_max_retries`. Ollama MUST use the
+official Ollama SDK for chat, streaming, embeddings, and model list/show.
+httpx MUST be used only for endpoints without SDK support (LM Studio native
+model listing), and those calls MUST pass the configured timeout.
+
+- AC1: `AsyncOpenAI` is constructed with the configured timeout and max
+  retries.
+- AC2: The Ollama client is constructed with the configured timeout.
+- AC3: LM Studio native listing passes the configured timeout.
+- AC4: No provider uses a client or endpoint other than documented above.
+
+Test target: per-provider constructor and call tests.
+
+### REQ-PROV-26 — Ollama retries MUST honor provider_max_retries
+
+Because the official Ollama SDK has no built-in retry configuration, Ollama
+provider calls MUST be wrapped in a retry layer honoring
+`provider_max_retries`, retrying only retryable failures.
+
+- AC1: A transient failure is retried up to `provider_max_retries` times.
+- AC2: Non-retryable failures are not retried.
+- AC3: Total attempts never exceed `provider_max_retries + 1`.
+
+Test target: `tests/providers/test_ollama.py` — retry tests.
+
+### REQ-PROV-27 — Multimodal messages MUST map to each provider's schema
+
+User messages containing image parts MUST be formatted per provider: the
+openai-SDK family uses the content-array form; Ollama uses its documented
+image field mapping.
+
+- AC1: A message with an image part produces the provider's documented image
+  representation.
+- AC2: Plain string messages are unchanged.
+
+Test target: per-provider message-formatting tests.
+
+### REQ-PROV-28 — Embedding calls MUST normalize usage and errors
+
+`embed` MUST return `EmbeddingResult`. Token usage MUST be normalized to
+`TokenUsage` when the provider reports it (missing categories default to 0)
+and be `None` otherwise. Non-2xx and malformed responses MUST raise
+`ModelInvocationError`.
+
+- AC1: OpenAI-family embeddings map usage to `TokenUsage`.
+- AC2: Ollama embeddings with token counts map to `TokenUsage`; without
+  counts, `usage=None`.
+- AC3: A failing embed call raises `ModelInvocationError`.
+
+Test target: per-provider embedding tests.
+
+### REQ-PROV-29 — Model type classification MUST map embed keywords to EMBED
+
+Per REQ-PROV-09, without a native type, an id containing `embed` MUST
+classify as `ModelType.EMBED`; `audio`/`image` keywords MUST classify as
+`ModelType.OTHER`.
+
+- AC1: `text-embedding-3-large` (no native type) classifies as EMBED.
+- AC2: A native `llm` type still overrides the `embed` keyword match.
+- AC3: A native `embedding` type classifies as EMBED.
+
+Test target: per-provider classification tests; OpenAI `_format_model` tests.
+
+## 15. Architecture — Consumer integration
+
+### REQ-SERV-01 — ChatService MUST consume the StreamEvent union
+
+ChatService MUST dispatch on `StreamEvent` types rather than inspecting
+optional fields, and MUST assemble `AssistantMessage` from accumulated
+content, tool calls, finish reason, and usage.
+
+- AC1: Content, reasoning, and tool-call deltas accumulate as before;
+  agentic-loop behavior does not regress.
+- AC2: A usage-only final chunk yields no error and the usage lands on the
+  final `AgentDoneEvent`.
+- AC3: The assembled `AssistantMessage` carries `usage` and `finish_reason`.
+
+Test target: `tests/services/` — chat tests.
+
+### REQ-SERV-02 — ModelService MUST preserve subtype fidelity
+
+`ModelService.list_models` and `get_model` MUST return the model subtypes
+without flattening. `get_provider_by_model` MUST dispatch on
+`model.provider_id` unchanged.
+
+- AC1: Listing returns `LanguageModel`/`EmbedModel` instances as produced by
+  providers.
+- AC2: Per-provider error isolation (one failing provider does not fail the
+  listing) is preserved.
+
+Test target: `tests/services/` — model service tests.
+
+### REQ-CLI-01 — CLI model listing MUST accept the embedding type
+
+The `models` command's `--type` option MUST accept `llm`, `embedding`, and
+`other`, with help text listing all three.
+
+- AC1: `--type embedding` lists only embedding models.
+- AC2: An invalid value is rejected with the documented error.
+
+Test target: `tests/cli/`.
+
+### REQ-CLI-02 — CLI MUST display pricing from ModelPricing
+
+Model listing output MUST render pricing from the structured `ModelPricing`
+fields where present, and show a placeholder when absent.
+
+- AC1: A model with pricing renders input/output/request values.
+- AC2: A model without pricing renders a placeholder without error.
+
+Test target: `tests/cli/`.
+
+### REQ-API-01 — API model routes MUST accept and serialize subtypes
+
+`GET /models` and `GET /models/{full_id}` MUST accept the `embedding` model
+type and serialize subtype-specific fields without error.
+
+- AC1: `?model_type=embedding` returns only embedding models.
+- AC2: The JSON response includes subtype fields (e.g. `embedding_dimensions`,
+  `supports_tools`) with absent fields as `null`.
+
+Test target: `tests/api/` — model route tests.
+
+## 16. Amendments to existing requirements
+
+| Requirement | Change |
+|---|---|
+| REQ-PROV-01 | Superseded by REQ-PROV-21: the usage-only final chunk is expressed as the final `StreamEndEvent`; the stream must still complete cleanly. |
+| REQ-PROV-02 | Superseded by REQ-PROV-21: token usage is delivered on the `StreamEndEvent` as `TokenUsage`; absent usage → `usage=None`. |
+| REQ-PROV-04 | Extended by REQ-PROV-25/26: official SDK clients carry timeout/retries; the Ollama SDK retry gap is closed by a retry layer; httpx calls pass the configured timeout. |
+| REQ-PROV-09 | AC2 amended by REQ-PROV-29: `embed` keyword → `ModelType.EMBED`; `audio`/`image` → `ModelType.OTHER`. |
+| REQ-PROV-10 | Extended by REQ-PROV-24: invocation guards use model subtypes. |
+| REQ-PROV-20 | Extended by REQ-PROV-28: `embed` failures raise `ModelInvocationError`. |
+
 ---
 
 ## Open questions
 
-- None. Requirements above are considered complete for the 2026-07-31 review
-  issues; architecture requirements for the provider rework are deferred by design
-  and will be appended to this document.
+- None. Sections 12-16 record the architecture requirements agreed on
+  2026-08-01; behavioral requirements 1-11 remain complete for the 2026-07-31
+  review issues.
