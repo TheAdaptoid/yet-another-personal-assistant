@@ -44,14 +44,23 @@ ToolApprovalGetter = Callable[
 
 
 def _assemble_tool_calls(raw_tool_calls):
-    """
-    Accumulate streamed tool-call deltas into ToolCalls (REQ-SERV-03).
-
-    Malformed accumulated argument fragments normalize to an empty dict instead
-    of raising JSONDecodeError.
-    """
-    tool_calls: list[ToolCall] = []
+    """Accumulate streamed tool-call deltas into ToolCalls (REQ-SERV-03)."""
+    merged: dict[int, ToolCallDeltaEvent] = {}
     for tcd in raw_tool_calls:
+        cur = merged.get(tcd.index)
+        if cur is None:
+            merged[tcd.index] = tcd
+            continue
+        merged[tcd.index] = ToolCallDeltaEvent(
+            index=tcd.index,
+            id=tcd.id or cur.id,
+            name=tcd.name or cur.name,
+            arguments=(cur.arguments or "") + (tcd.arguments or ""),
+        )
+
+    tool_calls: list[ToolCall] = []
+    for idx in sorted(merged):
+        tcd = merged[idx]
         if not (tcd.id and tcd.name):
             continue
         args = tcd.arguments or ""
