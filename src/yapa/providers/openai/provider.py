@@ -118,16 +118,55 @@ class OpenAIIP(OpenAICompatibleProvider):
         supports_reasoning: bool | None = None,
         pricing=None,
     ):
-        meta = self._MODEL_METADATA.get(model_id, {})
-        return LanguageModel(
-            id=model_id,
-            provider_id=self.id,
-            name=cast(str | None, meta.get("name")),
-            description=cast(str | None, meta.get("description")),
-            context_length=cast(int | None, meta.get("context_length")),
-            max_output=cast(int | None, meta.get("max_output")),
-            supports_tools=bool(meta.get("supports_tools", False)),
-            supports_vision=bool(meta.get("supports_vision", False)),
-            supports_reasoning=bool(meta.get("supports_reasoning", False)),
-            pricing=cast(ModelPricing | None, meta.get("pricing")),
+        base = super()._format_model(
+            model_id,
+            native_type,
+            name=name,
+            description=description,
+            context_length=context_length,
+            max_output=max_output,
+            supports_tools=supports_tools,
+            supports_vision=supports_vision,
+            supports_reasoning=supports_reasoning,
+            pricing=pricing,
+        )
+        if not isinstance(base, LanguageModel):
+            return base
+
+        meta = self._MODEL_METADATA.get(model_id)
+        if not meta:
+            return base
+
+        return base.model_copy(
+            update={
+                "name": cast(str | None, name or meta.get("name") or base.name),
+                "description": cast(
+                    str | None, description or meta.get("description") or base.description
+                ),
+                "context_length": cast(
+                    int | None,
+                    context_length or meta.get("context_length") or base.context_length,
+                ),
+                "max_output": cast(
+                    int | None, max_output or meta.get("max_output") or base.max_output
+                ),
+                "supports_tools": bool(
+                    supports_tools
+                    if supports_tools is not None
+                    else meta.get("supports_tools", base.supports_tools)
+                ),
+                "supports_vision": bool(
+                    supports_vision
+                    if supports_vision is not None
+                    else meta.get("supports_vision", base.supports_vision)
+                ),
+                "supports_reasoning": bool(
+                    supports_reasoning
+                    if supports_reasoning is not None
+                    else meta.get("supports_reasoning", base.supports_reasoning)
+                ),
+                "pricing": cast(
+                    ModelPricing | None, pricing or meta.get("pricing") or base.pricing
+                ),
+            }
         )
