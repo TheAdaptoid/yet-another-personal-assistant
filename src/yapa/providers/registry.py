@@ -1,12 +1,11 @@
 """Provider registry — attempts to initialize all known providers."""
 
-import logging
-
+from yapa.logging import get_logger
 from yapa.services.config import Config, JsonConfigStore
 
 from .base import InferenceProvider
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class ProviderNotAvailableError(Exception):
