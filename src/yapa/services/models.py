@@ -1,7 +1,7 @@
 """Model service — thin wrapper around ProviderRegistry."""
 
 from yapa.logging import get_logger
-from yapa.models import ModelData, ModelType
+from yapa.models import ModelData, ModelDataUnion, ModelType
 from yapa.providers import (
     DEFAULT_PROVIDER_CLASSES,
     InferenceProvider,
@@ -37,7 +37,7 @@ class ModelService:
         self,
         provider_id: str | None = None,
         model_type: ModelType | None = None,
-    ) -> list[ModelData]:
+    ) -> list[ModelDataUnion]:
         """Fetch models from one or all providers, returning a flat list."""
         if provider_id:
             try:
@@ -47,7 +47,7 @@ class ModelService:
                 logger.error(f"Failed to fetch models for '{provider_id}': {e}")
                 return []
 
-        results: list[ModelData] = []
+        results: list[ModelDataUnion] = []
         for provider in self._registry.available:
             try:
                 models = await provider.list_models(model_type)
@@ -56,7 +56,7 @@ class ModelService:
                 logger.error(f"Failed to fetch models for '{provider.id}': {e}")
         return results
 
-    async def get_model(self, model_full_id: str) -> ModelData:
+    async def get_model(self, model_full_id: str) -> ModelDataUnion:
         """Fetch details for a specific model by full ID (provider_id:model_id)."""
         try:
             provider_id, model_id = model_full_id.split(":", 1)

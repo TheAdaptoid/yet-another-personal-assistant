@@ -85,9 +85,7 @@ class TestSave:
         """Should raise StorageWriteError when write fails."""
         session = Session(title="fail")
         with pytest.raises(StorageWriteError):
-            patch = unittest.mock.patch(
-                "pathlib.Path.rename", side_effect=OSError("read-only")
-            )
+            patch = unittest.mock.patch("os.replace", side_effect=OSError("read-only"))
             with patch:
                 store.save(session)
 

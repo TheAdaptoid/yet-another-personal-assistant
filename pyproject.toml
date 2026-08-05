@@ -5,6 +5,7 @@ description = "An AI personal assistant backend"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "ollama>=0.4",
     "openai>=2.36.0",
     "openrouter>=0.9.1",
     "pydantic>=2.13.4",

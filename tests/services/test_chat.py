@@ -8,9 +8,8 @@ import pytest
 from yapa.models import (
     AssistantMessage,
     InferenceParams,
-    ModelData,
-    ModelType,
-    StreamDelta,
+    LanguageModel,
+    ReasoningEffort,
     TokenUsage,
     UserMessage,
 )
@@ -20,6 +19,12 @@ from yapa.models.event import (
     AgentStartEvent,
     ReasoningEvent,
     TextEvent,
+    ToolCallEvent,
+)
+from yapa.models.stream import (
+    ContentDelta,
+    ReasoningDelta,
+    StreamEndEvent,
 )
 from yapa.services.chat import ChatService
 from yapa.services.models import ModelService
@@ -54,16 +59,16 @@ class TestStream:
         session = sessions.create()
         provider = models.get_provider_by_model.return_value
 
-        async def _stream(model, messages, tools=None, params=None):
-            yield StreamDelta(content="Hello")
-            yield StreamDelta(
-                content=" world",
+        async def _stream(model, messages, tools=None, params=None, reasoning=None):
+            yield ContentDelta(content="Hello")
+            yield ContentDelta(content=" world")
+            yield StreamEndEvent(
                 finish_reason="stop",
                 usage=TokenUsage(prompt_tokens=5, completion_tokens=3, total_tokens=8),
             )
 
         provider.stream_chat.side_effect = _stream
-        model = ModelData(id="gpt-4", provider_id="openai", type=ModelType.LLM)
+        model = LanguageModel(id="gpt-4", provider_id="openai")
 
         events = []
         async for event in chat.stream(
@@ -90,15 +95,13 @@ class TestStream:
         session = sessions.create()
         provider = models.get_provider_by_model.return_value
 
-        async def _stream(model, messages, tools=None, params=None):
-            yield StreamDelta(content="Hello")
-            yield StreamDelta(
-                content=" world",
-                finish_reason="stop",
-            )
+        async def _stream(model, messages, tools=None, params=None, reasoning=None):
+            yield ContentDelta(content="Hello")
+            yield ContentDelta(content=" world")
+            yield StreamEndEvent(finish_reason="stop")
 
         provider.stream_chat.side_effect = _stream
-        model = ModelData(id="gpt-4", provider_id="openai", type=ModelType.LLM)
+        model = LanguageModel(id="gpt-4", provider_id="openai")
 
         async for _ in chat.stream(
             session_id=session.id,
@@ -119,12 +122,13 @@ class TestStream:
         session = sessions.create()
         provider = models.get_provider_by_model.return_value
 
-        async def _stream(model, messages, tools=None, params=None):
-            yield StreamDelta(reasoning_content="thinking...")
-            yield StreamDelta(content="Answer", finish_reason="stop")
+        async def _stream(model, messages, tools=None, params=None, reasoning=None):
+            yield ReasoningDelta(content="thinking...")
+            yield ContentDelta(content="Answer")
+            yield StreamEndEvent(finish_reason="stop")
 
         provider.stream_chat.side_effect = _stream
-        model = ModelData(id="gpt-4", provider_id="openai", type=ModelType.LLM)
+        model = LanguageModel(id="gpt-4", provider_id="openai")
 
         events = []
         async for event in chat.stream(
@@ -141,18 +145,111 @@ class TestStream:
         assert isinstance(events[3], AgentDoneEvent)
         assert events[3].content == "Answer"
 
+    async def test_includes_reasoning_on_assistant_message(
+        self, chat, sessions, models
+    ):
+        session = sessions.create()
+        provider = models.get_provider_by_model.return_value
+
+        async def _stream(model, messages, tools=None, params=None, reasoning=None):
+            yield ReasoningDelta(content="thinking...")
+            yield ContentDelta(content="Answer")
+            yield StreamEndEvent(finish_reason="stop")
+
+        provider.stream_chat.side_effect = _stream
+        model = LanguageModel(id="gpt-4", provider_id="openai")
+
+        async for _ in chat.stream(
+            session_id=session.id,
+            prompt="Hi",
+            model=model,
+        ):
+            pass
+
+        loaded = sessions.get(str(session.id))
+        assistant = loaded.messages[1]
+        assert isinstance(assistant, AssistantMessage)
+        assert assistant.reasoning_content == "thinking..."
+
+    async def test_forwards_reasoning_to_provider(self, chat, sessions, models):
+        session = sessions.create()
+        provider = models.get_provider_by_model.return_value
+        captured = {}
+
+        async def _stream(model, messages, tools=None, params=None, reasoning=None):
+            captured["reasoning"] = reasoning
+            yield ContentDelta(content="OK")
+            yield StreamEndEvent(finish_reason="stop")
+
+        provider.stream_chat.side_effect = _stream
+        model = LanguageModel(id="gpt-4", provider_id="openai", supports_reasoning=True)
+
+        async for _ in chat.stream(
+            session_id=session.id,
+            prompt="Hi",
+            model=model,
+            reasoning=ReasoningEffort.HIGH,
+        ):
+            pass
+
+        assert captured["reasoning"] == ReasoningEffort.HIGH
+
+    async def test_reasoning_rejected_for_unsupported_model(
+        self, chat, sessions, models
+    ):
+        session = sessions.create()
+        model = LanguageModel(
+            id="plain", provider_id="ollama", supports_reasoning=False
+        )
+
+        with pytest.raises(ValueError, match="does not support reasoning"):
+            async for _ in chat.stream(
+                session_id=session.id,
+                prompt="Hi",
+                model=model,
+                reasoning=ReasoningEffort.HIGH,
+            ):
+                pass
+
+    async def test_reasoning_off_works_for_unsupported_model(
+        self, chat, sessions, models
+    ):
+        session = sessions.create()
+        provider = models.get_provider_by_model.return_value
+
+        async def _stream(model, messages, tools=None, params=None, reasoning=None):
+            yield ContentDelta(content="OK")
+            yield StreamEndEvent(finish_reason="stop")
+
+        provider.stream_chat.side_effect = _stream
+        model = LanguageModel(
+            id="plain", provider_id="ollama", supports_reasoning=False
+        )
+
+        events = [
+            ev
+            async for ev in chat.stream(
+                session_id=session.id,
+                prompt="Hi",
+                model=model,
+                reasoning=ReasoningEffort.OFF,
+            )
+        ]
+        assert any(isinstance(e, TextEvent) for e in events)
+
     async def test_uses_session_system_prompt(self, chat, sessions, models):
         session = sessions.create()
         sessions.update_system_prompt(str(session.id), "Be concise.")
         provider = models.get_provider_by_model.return_value
         captured_kwargs = {}
 
-        async def _capture(model, messages, tools=None, params=None):
+        async def _capture(model, messages, tools=None, params=None, reasoning=None):
             captured_kwargs["messages"] = messages
-            yield StreamDelta(content="OK", finish_reason="stop")
+            yield ContentDelta(content="OK")
+            yield StreamEndEvent(finish_reason="stop")
 
         provider.stream_chat.side_effect = _capture
-        model = ModelData(id="gpt-4", provider_id="openai", type=ModelType.LLM)
+        model = LanguageModel(id="gpt-4", provider_id="openai")
 
         async for _ in chat.stream(
             session_id=session.id,
@@ -175,12 +272,13 @@ class TestStream:
         provider = models.get_provider_by_model.return_value
         captured_kwargs = {}
 
-        async def _capture(model, messages, tools=None, params=None):
+        async def _capture(model, messages, tools=None, params=None, reasoning=None):
             captured_kwargs["params"] = params
-            yield StreamDelta(content="OK", finish_reason="stop")
+            yield ContentDelta(content="OK")
+            yield StreamEndEvent(finish_reason="stop")
 
         provider.stream_chat.side_effect = _capture
-        model = ModelData(id="gpt-4", provider_id="openai", type=ModelType.LLM)
+        model = LanguageModel(id="gpt-4", provider_id="openai")
 
         async for _ in chat.stream(
             session_id=session.id,
@@ -203,12 +301,13 @@ class TestStream:
     async def test_uses_session_model_as_fallback(self, chat, sessions, models):
         session = sessions.create()
         # Manually set model on session (simulating previous stream)
-        session.model = ModelData(id="gpt-4", provider_id="openai", type=ModelType.LLM)
+        session.model = LanguageModel(id="gpt-4", provider_id="openai")
         sessions._store.save(session, overwrite=True)
         provider = models.get_provider_by_model.return_value
 
-        async def _stream(model, messages, tools=None, params=None):
-            yield StreamDelta(content="OK", finish_reason="stop")
+        async def _stream(model, messages, tools=None, params=None, reasoning=None):
+            yield ContentDelta(content="OK")
+            yield StreamEndEvent(finish_reason="stop")
 
         provider.stream_chat.side_effect = _stream
 
@@ -219,18 +318,19 @@ class TestStream:
             pass
 
         models.get_provider_by_model.assert_called_with(
-            ModelData(id="gpt-4", provider_id="openai", type=ModelType.LLM)
+            LanguageModel(id="gpt-4", provider_id="openai")
         )
 
     async def test_saves_model_to_session_after_stream(self, chat, sessions, models):
         session = sessions.create()
         provider = models.get_provider_by_model.return_value
 
-        async def _stream(model, messages, tools=None, params=None):
-            yield StreamDelta(content="Hi", finish_reason="stop")
+        async def _stream(model, messages, tools=None, params=None, reasoning=None):
+            yield ContentDelta(content="Hi")
+            yield StreamEndEvent(finish_reason="stop")
 
         provider.stream_chat.side_effect = _stream
-        model = ModelData(id="gpt-4", provider_id="openai", type=ModelType.LLM)
+        model = LanguageModel(id="gpt-4", provider_id="openai")
 
         async for _ in chat.stream(
             session_id=session.id,
@@ -248,7 +348,7 @@ class TestStream:
         session = sessions.create()
         provider = models.get_provider_by_model.return_value
         provider.stream_chat.side_effect = Exception("API failure")
-        model = ModelData(id="gpt-4", provider_id="openai", type=ModelType.LLM)
+        model = LanguageModel(id="gpt-4", provider_id="openai")
 
         events = []
         async for event in chat.stream(
@@ -272,11 +372,12 @@ class TestStream:
         session = sessions.create()
         provider = models.get_provider_by_model.return_value
 
-        async def _stream(model, messages, tools=None, params=None):
-            yield StreamDelta(content="Resp", finish_reason="stop")
+        async def _stream(model, messages, tools=None, params=None, reasoning=None):
+            yield ContentDelta(content="Resp")
+            yield StreamEndEvent(finish_reason="stop")
 
         provider.stream_chat.side_effect = _stream
-        model = ModelData(id="gpt-4", provider_id="openai", type=ModelType.LLM)
+        model = LanguageModel(id="gpt-4", provider_id="openai")
 
         async for _ in chat.stream(session_id=session.id, prompt="First", model=model):
             pass
@@ -291,11 +392,11 @@ class TestStream:
         session = sessions.create()
         provider = models.get_provider_by_model.return_value
 
-        async def _stream(model, messages, tools=None, params=None):
-            yield StreamDelta()
+        async def _stream(model, messages, tools=None, params=None, reasoning=None):
+            yield StreamEndEvent()
 
         provider.stream_chat.side_effect = _stream
-        model = ModelData(id="gpt-4", provider_id="openai", type=ModelType.LLM)
+        model = LanguageModel(id="gpt-4", provider_id="openai")
 
         events = []
         async for event in chat.stream(
@@ -319,6 +420,40 @@ class TestStream:
             async for _ in chat.stream(
                 session_id=uuid4(),
                 prompt="Hi",
-                model=ModelData(id="gpt-4", provider_id="openai", type=ModelType.LLM),
+                model=LanguageModel(id="gpt-4", provider_id="openai"),
             ):
                 pass
+
+    async def test_normalizes_malformed_tool_call_arguments(
+        self, chat, sessions, models
+    ):
+        session = sessions.create()
+        provider = models.get_provider_by_model.return_value
+
+        async def _stream(model, messages, tools=None, params=None, reasoning=None):
+            from yapa.models.stream import ToolCallDeltaEvent
+
+            yield ToolCallDeltaEvent(
+                index=0, id="call_1", name="calc", arguments='{"a":'
+            )
+            yield StreamEndEvent(finish_reason="tool_calls")
+            # Second turn: no tool calls -> done
+            yield ContentDelta(content="Done")
+            yield StreamEndEvent(finish_reason="stop")
+
+        provider.stream_chat.side_effect = _stream
+        model = LanguageModel(id="gpt-4", provider_id="openai")
+
+        events = []
+        async for event in chat.stream(
+            session_id=session.id,
+            prompt="Hi",
+            model=model,
+        ):
+            events.append(event)
+
+        # Find the ToolCallEvents and assert their arguments normalized to {}
+        tool_call_events = [e for e in events if isinstance(e, ToolCallEvent)]
+        assert tool_call_events, "expected at least one ToolCallEvent"
+        assert all(tc.arguments == {} for tc in tool_call_events)
+        assert tool_call_events[0].call_id == "call_1"

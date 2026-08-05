@@ -1,6 +1,7 @@
 """Shared data models for the Yapa application."""
 
 from .base import TrackedEntity
+from .embedding import EmbeddingResult
 from .event import (
     AgentDoneEvent,
     AgentErrorEvent,
@@ -14,21 +15,34 @@ from .event import (
     ToolResultEvent,
 )
 from .inference import (
+    EmbedModel,
     InferenceParams,
+    LanguageModel,
     ModelData,
+    ModelDataUnion,
+    ModelPricing,
     ModelType,
-    StreamDelta,
+    ReasoningEffort,
     TokenUsage,
-    ToolCallDelta,
 )
 from .message import (
     AssistantMessage,
+    ContentPart,
+    ImagePart,
     Message,
     SystemMessage,
+    TextPart,
     ToolMessage,
     UserMessage,
 )
 from .session import Session
+from .stream import (
+    ContentDelta,
+    ReasoningDelta,
+    StreamEndEvent,
+    StreamEvent,
+    ToolCallDeltaEvent,
+)
 from .tool import (
     ToolApprovalRequest,
     ToolApprovalResponse,
@@ -38,17 +52,31 @@ from .tool import (
 __all__ = [
     # Messages
     "AssistantMessage",
+    "ContentPart",
+    "ImagePart",
     "Message",
     "SystemMessage",
+    "TextPart",
     "ToolMessage",
     "UserMessage",
     # Inference
+    "EmbedModel",
     "InferenceParams",
+    "LanguageModel",
     "ModelData",
+    "ModelDataUnion",
+    "ModelPricing",
     "ModelType",
-    "StreamDelta",
+    "ReasoningEffort",
     "TokenUsage",
-    "ToolCallDelta",
+    # Embedding
+    "EmbeddingResult",
+    # Streaming
+    "ContentDelta",
+    "ReasoningDelta",
+    "StreamEndEvent",
+    "StreamEvent",
+    "ToolCallDeltaEvent",
     # Session
     "Session",
     "TrackedEntity",

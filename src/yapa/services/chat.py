@@ -7,8 +7,9 @@ from uuid import UUID
 from yapa.models import (
     AssistantMessage,
     InferenceParams,
+    LanguageModel,
     Message,
-    ModelData,
+    ReasoningEffort,
     SystemMessage,
     ToolMessage,
     UserMessage,
@@ -24,7 +25,13 @@ from yapa.models.event import (
     ToolCallEvent,
     ToolResultEvent,
 )
-from yapa.models.inference import TokenUsage, ToolCallDelta
+from yapa.models.stream import (
+    ContentDelta,
+    ReasoningDelta,
+    StreamEndEvent,
+    TokenUsage,
+    ToolCallDeltaEvent,
+)
 from yapa.models.tool import ToolApprovalRequest, ToolApprovalResponse, ToolCall
 from yapa.services.models import ModelService
 from yapa.services.session import SessionService
@@ -34,6 +41,38 @@ ToolApprovalGetter = Callable[
     [ToolApprovalRequest],
     Awaitable[ToolApprovalResponse],
 ]
+
+
+def _assemble_tool_calls(raw_tool_calls):
+    """Accumulate streamed tool-call deltas into ToolCalls (REQ-SERV-03)."""
+    merged: dict[int, ToolCallDeltaEvent] = {}
+    for tcd in raw_tool_calls:
+        cur = merged.get(tcd.index)
+        if cur is None:
+            merged[tcd.index] = tcd
+            continue
+        merged[tcd.index] = ToolCallDeltaEvent(
+            index=tcd.index,
+            id=tcd.id or cur.id,
+            name=tcd.name or cur.name,
+            arguments=(cur.arguments or "") + (tcd.arguments or ""),
+        )
+
+    tool_calls: list[ToolCall] = []
+    for idx in sorted(merged):
+        tcd = merged[idx]
+        if not (tcd.id and tcd.name):
+            continue
+        args = tcd.arguments or ""
+        if args.strip() == "":
+            parsed: dict = {}
+        else:
+            try:
+                parsed = json.loads(args)
+            except json.JSONDecodeError:
+                parsed = {}
+        tool_calls.append(ToolCall(id=tcd.id, tool_name=tcd.name, arguments=parsed))
+    return tool_calls
 
 
 class ChatService:
@@ -57,76 +96,58 @@ class ChatService:
         self,
         session_id: UUID,
         prompt: str,
-        model: ModelData | None = None,
+        model: LanguageModel | None = None,
+        reasoning: ReasoningEffort | None = None,
         get_approval: ToolApprovalGetter | None = None,
     ) -> AsyncGenerator[Event, None]:
         """Run the agentic loop: stream model response, execute tools, repeat."""
         session = self._sessions.get(str(session_id))
-
-        if model is None:
-            if session.model is not None:
-                model = session.model
-            else:
-                raise ValueError("No model specified")
+        model = self._resolve_model(session, model, reasoning)
 
         yield AgentStartEvent(model_id=model.full_id)
 
         provider = self._models.get_provider_by_model(model)
-
-        messages: list[Message] = []
-        if session.system_prompt is not None:
-            messages.append(SystemMessage(content=session.system_prompt))
-        messages.extend(session.messages)
-        messages.append(UserMessage(content=prompt))
-
+        messages, user_msg = self._build_initial_messages(session, prompt)
         params = session.inference_params or InferenceParams()
-        initial_prompt_msg = messages[-1]
 
         try:
             for _ in range(self.MAX_ITERATIONS):
                 (
                     events,
                     content_buffer,
+                    reasoning_buffer,
                     finish_reason,
                     usage,
                     raw_tool_calls,
-                ) = await self._process_stream_deltas(provider, model, messages, params)
+                ) = await self._process_stream_deltas(
+                    provider, model, messages, params, reasoning
+                )
                 for event in events:
                     yield event
 
-                # Assemble tool calls
-                tool_calls = [
-                    ToolCall(id=tc_id, tool_name=tc_name, arguments=json.loads(tc_args))
-                    for _, tc_id, tc_name, tc_args in raw_tool_calls
-                    if tc_id and tc_name and tc_args
-                ]
+                tool_calls = _assemble_tool_calls(raw_tool_calls)
 
                 assistant_msg = AssistantMessage(
                     content=content_buffer or None,
+                    reasoning_content=reasoning_buffer or None,
                     tool_calls=tool_calls,
                     model=model.full_id,
                     usage=usage,
                 )
                 messages.append(assistant_msg)
 
-                # No tool calls → done
                 if not tool_calls:
-                    if not content_buffer:
-                        yield AgentErrorEvent(message="Model returned empty response")
-                        return
-                    self._sessions.add_messages(
-                        str(session_id),
-                        [initial_prompt_msg, assistant_msg],
+                    yield self._finalize_turn(
+                        session_id=session_id,
+                        user_msg=user_msg,
+                        assistant_msg=assistant_msg,
                         model=model,
-                    )
-                    yield AgentDoneEvent(
-                        content=content_buffer,
+                        content_buffer=content_buffer,
                         finish_reason=finish_reason,
                         usage=usage,
                     )
                     return
 
-                # Execute tool calls
                 tool_events, messages = await self._execute_tool_calls(
                     tool_calls=tool_calls,
                     messages=messages,
@@ -135,51 +156,121 @@ class ChatService:
                 for event in tool_events:
                     yield event
 
-            # Exceeded max iterations
             yield AgentErrorEvent(message="Max iterations reached")
 
         except Exception as e:
             yield AgentErrorEvent(message=str(e))
 
+    def _resolve_model(
+        self,
+        session,
+        model: LanguageModel | None,
+        reasoning: ReasoningEffort | None,
+    ) -> LanguageModel:
+        """Resolve model from session fallback and validate reasoning support."""
+        if model is None:
+            if session.model is not None:
+                model = session.model
+            else:
+                raise ValueError("No model specified")
+        if reasoning is not None and reasoning != ReasoningEffort.OFF:
+            if not model.supports_reasoning:
+                raise ValueError(
+                    f"Model '{model.full_id}' does not support reasoning. "
+                    f"Use reasoning=off or choose a reasoning-capable model."
+                )
+        return model
+
+    def _build_initial_messages(
+        self,
+        session,
+        prompt: str,
+    ) -> tuple[list[Message], Message]:
+        """Build the message list and return it with the user prompt message."""
+        messages: list[Message] = []
+        if session.system_prompt is not None:
+            messages.append(SystemMessage(content=session.system_prompt))
+        messages.extend(session.messages)
+        user_msg = UserMessage(content=prompt)
+        messages.append(user_msg)
+        return messages, user_msg
+
+    def _finalize_turn(
+        self,
+        *,
+        session_id: UUID,
+        user_msg: Message,
+        assistant_msg: AssistantMessage,
+        model: LanguageModel,
+        content_buffer: str,
+        finish_reason: str | None,
+        usage: TokenUsage | None,
+    ) -> Event:
+        """Persist final turn and return the completion event."""
+        if not content_buffer:
+            return AgentErrorEvent(message="Model returned empty response")
+        self._sessions.add_messages(
+            str(session_id),
+            [user_msg, assistant_msg],
+            model=model,
+        )
+        return AgentDoneEvent(
+            content=content_buffer,
+            finish_reason=finish_reason,
+            usage=usage,
+        )
+
     async def _process_stream_deltas(
         self,
         provider,
-        model: ModelData,
+        model: LanguageModel,
         messages: list[Message],
         params: InferenceParams,
+        reasoning: ReasoningEffort | None,
     ) -> tuple[
         list[Event],
         str,
+        str,
         str | None,
         TokenUsage | None,
-        list[tuple[int, str | None, str | None, str | None]],
+        list[ToolCallDeltaEvent],
     ]:
-        """Stream deltas from provider, yield events, and return accumulators."""
+        """Stream events from provider, emit events, and return accumulators."""
         events: list[Event] = []
         content_buffer = ""
+        reasoning_buffer = ""
         finish_reason: str | None = None
-        usage: TokenUsage | None = None
-        raw_tool_calls: list[tuple[int, str | None, str | None, str | None]] = []
+        usage = None
+        raw_tool_calls: list[ToolCallDeltaEvent] = []
 
-        async for delta in provider.stream_chat(
+        async for event in provider.stream_chat(
             model=model,
             messages=messages,
             tools=self._tools.list_tools(),
             params=params,
+            reasoning=reasoning,
         ):
-            if delta.reasoning_content:
-                events.append(ReasoningEvent(content=delta.reasoning_content))
-            if delta.content:
-                content_buffer += delta.content
-                events.append(TextEvent(content=delta.content))
-            for tcd in delta.tool_calls:
-                _merge_tool_call_delta(raw_tool_calls, tcd)
-            if delta.finish_reason:
-                finish_reason = delta.finish_reason
-            if delta.usage:
-                usage = delta.usage
+            if isinstance(event, ReasoningDelta):
+                reasoning_buffer += event.content
+                events.append(ReasoningEvent(content=event.content))
+            elif isinstance(event, ContentDelta):
+                content_buffer += event.content
+                events.append(TextEvent(content=event.content))
+            elif isinstance(event, ToolCallDeltaEvent):
+                raw_tool_calls.append(event)
+            elif isinstance(event, StreamEndEvent):
+                finish_reason = event.finish_reason or finish_reason
+                if event.usage is not None:
+                    usage = event.usage
 
-        return events, content_buffer, finish_reason, usage, raw_tool_calls
+        return (
+            events,
+            content_buffer,
+            reasoning_buffer,
+            finish_reason,
+            usage,
+            raw_tool_calls,
+        )
 
     async def _execute_tool_calls(
         self,
@@ -272,23 +363,6 @@ class ChatService:
                     )
                 )
         return events, messages
-
-
-def _merge_tool_call_delta(
-    acc: list[tuple[int, str | None, str | None, str | None]],
-    delta: ToolCallDelta,
-) -> None:
-    """Merge a tool call delta into the accumulator list."""
-    while len(acc) <= delta.index:
-        acc.append((len(acc), None, None, None))
-    idx, tid, tname, targs = acc[delta.index]
-    if delta.id:
-        tid = delta.id
-    if delta.name:
-        tname = delta.name
-    if delta.arguments:
-        targs = (targs or "") + delta.arguments
-    acc[delta.index] = (idx, tid, tname, targs)
 
 
 def _serialize_result(result: object) -> str:
