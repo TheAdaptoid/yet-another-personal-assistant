@@ -154,6 +154,12 @@ Key patterns:
 See [AGENTS.md](AGENTS.md) for architecture details, design decisions,
 and conventions.
 
+## Reporting issues
+
+Bug reports and feature requests should use the issue templates in
+[`.github/ISSUE_TEMPLATE/`](.github/ISSUE_TEMPLATE/). Fill in every
+section; incomplete reports are hard to triage.
+
 ## Submitting changes
 
 1. Pull the latest from `master`.

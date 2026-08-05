@@ -131,6 +131,12 @@ The server provides:
   params
 - `WS /api/v1/chat/{session_id}` — streaming chat over WebSocket
 
+## Reporting issues
+
+Found a bug or have a feature request? Use the issue templates in
+[`.github/ISSUE_TEMPLATE/`](.github/ISSUE_TEMPLATE/) — GitHub offers
+them automatically when you open an issue.
+
 ## Quality checks
 
 ```bash
