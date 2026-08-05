@@ -141,7 +141,8 @@ class OpenAIIP(OpenAICompatibleProvider):
             update={
                 "name": cast(str | None, name or meta.get("name") or base.name),
                 "description": cast(
-                    str | None, description or meta.get("description") or base.description
+                    str | None,
+                    description or meta.get("description") or base.description,
                 ),
                 "context_length": cast(
                     int | None,
