@@ -43,7 +43,7 @@ class LMStudioIP(OpenAICompatibleProvider):
         return {"reasoning": reasoning.value}
 
     def _format_model_from_native(self, raw: dict) -> ModelData:
-        """Format a native LY Studio model entry into a ModelData (REQ-PROV-09)."""
+        """Format a native LM Studio model entry into a ModelData (REQ-PROV-09)."""
         model_id = raw.get("key", "")
         native_type = raw.get("type")
         caps = raw.get("capabilities", [])
