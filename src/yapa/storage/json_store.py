@@ -1,6 +1,7 @@
 """A generic store for managing entities of a specific type."""
 
 import json
+import os
 from pathlib import Path
 from typing import Generic, TypeVar
 
@@ -58,7 +59,7 @@ class GenericJSONStore(Generic[TE]):
             tmp_file_path.write_text(
                 json.dumps(entity.model_dump(mode="json")), encoding="utf-8"
             )
-            tmp_file_path.rename(file_path)
+            os.replace(tmp_file_path, file_path)
         except Exception as e:
             err_msg = f"Failed to save entity: {e}"
             logger.error(err_msg, exc_info=True)

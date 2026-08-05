@@ -1,14 +1,16 @@
 """Tests for Session model — serialization and message discrimination."""
 
+import pytest
+from pydantic import ValidationError
+
 from yapa.models import (
     AssistantMessage,
     InferenceParams,
-    ModelData,
-    ModelType,
     Session,
     SystemMessage,
     UserMessage,
 )
+from yapa.models.inference import LanguageModel
 
 
 class TestJsonRoundTrip:
@@ -55,14 +57,14 @@ class TestModelField:
         assert session.model is None
 
     def test_round_trip(self):
-        model = ModelData(id="gpt-4o", provider_id="openai", type=ModelType.LLM)
+        model = LanguageModel(id="gpt-4o", provider_id="openai")
         session = Session(model=model)
         data = session.model_dump(mode="json")
         restored = Session(**data)
         assert restored.model is not None
         assert restored.model.id == "gpt-4o"
         assert restored.model.provider_id == "openai"
-        assert restored.model.type == ModelType.LLM
+        assert restored.model.type == "llm"
 
     def test_none_omits_from_json(self):
         session = Session()
@@ -70,7 +72,7 @@ class TestModelField:
         assert data.get("model") is None
 
     def test_serializes_as_object(self):
-        model = ModelData(id="claude-3", provider_id="anthropic", type=ModelType.LLM)
+        model = LanguageModel(id="claude-3", provider_id="anthropic")
         session = Session(model=model)
         data = session.model_dump(mode="json")
         assert isinstance(data["model"], dict)
@@ -101,3 +103,15 @@ class TestSessionNewFields:
         assert restored.inference_params is not None
         assert restored.inference_params.temperature == 0.7
         assert restored.inference_params.max_tokens == 4096
+
+
+def test_session_loads_with_llm_model() -> None:
+    model = LanguageModel(id="gpt-4", provider_id="openai")
+    s = Session(model=model)
+    assert s.model is not None
+    assert s.model.type == "llm"
+
+
+def test_session_rejects_embedding_model() -> None:
+    with pytest.raises(ValidationError):
+        Session(model={"id": "embed", "provider_id": "openai", "type": "embedding"})
