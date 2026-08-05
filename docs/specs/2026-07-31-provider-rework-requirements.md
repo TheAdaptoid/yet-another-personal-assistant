@@ -2,6 +2,14 @@
 
 Status: draft
 Date: 2026-07-31
+Last updated: 2026-08-04
+
+> **2026-08-04 addendum** — this update closes the remaining gaps identified
+> during a robustness review. It resolves the OpenRouter/Ollama client strategy,
+> defines subtype construction for the model hierarchy, hardens tool-call
+> accumulation, specifies the `embed` contract, pins reasoning precedence, and
+> promotes `ReasoningEffort` to a first-class chat argument.
+> All additions and amendments are catalogued in the section 16 table.
 
 ## Purpose
 
@@ -110,7 +118,10 @@ settings).
 - AC1: The official API client is constructed with the configured timeout and
   max retries.
 - AC2: Any auxiliary HTTP requests retained by the new architecture pass the
-  configured timeout and retry per configuration.
+  configured timeout and retry per configuration. This MUST include OpenRouter
+  native model listing and LM Studio native model listing, whose httpx clients
+  MUST be constructed with `provider_timeout` (and retry per configuration
+  where a retry layer exists).
 - AC3: Defaults remain `provider_timeout=120`, `provider_max_retries=2`.
 
 Test target: provider constructor tests; any native-API call tests.
@@ -163,6 +174,9 @@ Test target: `tests/providers/test_registry.py`.
 
 - AC1: A known id returns the full `ModelData` from provider data.
 - AC2: An unknown id raises a typed error and returns no model.
+- AC3: For list-then-search providers (OpenRouter, LM Studio), a model absent
+  from the provider's listing raises `ModelsFetchError`; no fallback
+  fabrication of a `ModelData` occurs.
 
 Test target: per-provider model tests (all four providers).
 
@@ -191,6 +205,9 @@ match the provider's id, and the API client MUST NOT be called.
 - AC2: A model whose `provider_id` matches proceeds normally.
 - AC3: The existing non-LLM type rejection (typed error, no network call) is
   preserved.
+- AC4: A `LanguageModel` whose `provider_id` differs from the provider raises a
+  typed error (`ModelTypeError`), the client is never called, and this check
+  applies to both `stream_chat` and `static_chat`.
 
 Test target: `tests/providers/test_base.py` (contract) or per-provider tests.
 
@@ -283,7 +300,9 @@ field values. Ids not in the table MUST yield default metadata (None/False)
 without error.
 
 - AC1: A parametrized test covers every table entry and asserts its
-  `context_length`, `max_output`, `supports_tools`, and `supports_vision`.
+  `context_length`, `max_output`, `supports_tools`, and `supports_vision`
+  values, plus the `LanguageModel` fields `supports_reasoning`,
+  `reasoning_levels`, `supports_streaming`, and `pricing`.
 - AC2: An id not in the table yields default metadata and no error.
 
 Test target: `tests/providers/test_openai.py` — metadata tests.
@@ -301,7 +320,18 @@ precedence MUST be documented and tested.
 - AC2: A provider-documented alternative field (e.g. `reasoning`) is extracted
   where applicable.
 - AC3: Empty or whitespace-only reasoning yields `None`.
-- AC4: Precedence when multiple fields are present is documented and tested.
+- AC4: Precedence when multiple fields are present is documented and tested. The
+  documented precedence is pinned as follows:
+    - **OpenAI, LM Studio, OpenRouter** — the single source of truth is the
+      `reasoning_content` field. There is NO `reasoning`-first fallback; a
+      `reasoning` attribute is never consulted as an alternative to
+      `reasoning_content`. (This corrects the pre-existing wrong-precedence
+      behavior where `reasoning` won over `reasoning_content`.)
+    - **Ollama (native SDK)** — the field is `message.thinking` for a streamed
+      chunk and `message.thinking` on the static message. There is no other
+      reasoning field.
+    - Empty or whitespace-only content in the source field yields `None` for
+      all providers (AC3).
 
 Test target: per-provider reasoning tests.
 
@@ -326,6 +356,13 @@ retrieval, `ModelInvocationError` for chat — with tests for each call type.
 
 - AC1: A non-2xx response on model listing raises `ModelsFetchError`.
 - AC2: A non-2xx response on a chat call raises `ModelInvocationError`.
+- AC3: SDK-specific exceptions (e.g. `openai.APIStatusError` with a non-2xx
+  status, `ollama.ResponseError`) surface as the documented typed errors —
+  `ModelsFetchError` for model listing/retrieval, `ModelInvocationError` for
+  chat/streaming/embedding — with a test per call type per provider that mocks
+  each SDK's error type.
+- AC4: The conversion MUST NOT leak a raw SDK or httpx exception to the caller;
+  only `InferenceProviderError` subtypes cross the provider boundary.
 
 Test target: per-provider error-path tests.
 
@@ -347,13 +384,18 @@ Test target: `tests/models/` — model type tests; `tests/api/`; `tests/cli/`.
 `ModelData` MUST be the base type carrying `id`, `provider_id`, `type`, `name`,
 and `description`. `LanguageModel` and `EmbedModel` MUST be subtypes
 discriminated by the `type` field. Parsing a model record MUST yield the
-correct subtype without explicit consumer dispatch.
+correct subtype without explicit consumer dispatch. Providers MUST construct
+the correct subtype (not a bare `ModelData`) whenever the type is known.
 
 - AC1: A record with `type="llm"` parses as `LanguageModel`.
 - AC2: A record with `type="embedding"` parses as `EmbedModel`.
 - AC3: A record with `type="other"` parses as bare `ModelData`.
 - AC4: `name` and `description` default to `None` for every subtype when
   absent.
+- AC5: A provider that knows a model is an LLM returns a `LanguageModel`; a
+  provider that knows a model is an embedding model returns an `EmbedModel`;
+  unknown/unclassified models return bare `ModelData`. No provider returns a
+  plain `ModelData` for a model it has classified.
 
 Test target: `tests/models/` — model data tests.
 
@@ -367,6 +409,10 @@ unknown.
 - AC2: Unknown pricing fields default to `None` without error.
 - AC3: Unknown pricing on a model is represented as a `None` value, not an
   empty object.
+- AC4: OpenRouter native pricing is normalized: per-1K-token `prompt`/`completion`
+  values are converted to USD per million tokens into `input`/`output`, and
+  the `request` field maps to `request`. Fields OpenRouter reports that have no
+  `ModelPricing` counterpart (e.g. `image`, `web_search`) are dropped.
 
 Test target: `tests/models/` — pricing tests.
 
@@ -397,19 +443,29 @@ Test target: `tests/models/` — embed model tests.
 
 `InferenceParams` MUST contain the typed fields `temperature`, `max_tokens`,
 `top_p`, `presence_penalty`, `frequency_penalty`, `stop`, `seed`, `top_k`,
-`min_p`, `repeat_penalty`, and `reasoning_effort`. Every field MUST default to
-`None` and be omitted from API requests when unset (see REQ-PROV-14).
+`min_p`, and `repeat_penalty`. `ReasoningEffort` is NOT a field of
+`InferenceParams` — it is passed as a first-class chat argument (REQ-PROV-30).
+Every field MUST default to `None` and be omitted from API requests when unset
+(see REQ-PROV-14).
 
 - AC1: A params object with all fields unset serializes without those keys.
 - AC2: A params object with a subset set serializes only the set keys.
 - AC3: `stop` accepts a single string or a list of strings.
+- AC4: `InferenceParams` has no `reasoning_effort` (or any reasoning) field;
+  a params object can never carry reasoning.
 
 Test target: `tests/models/` — inference params tests.
 
-### REQ-MODEL-07 — Reasoning effort MUST be a unified enum
+### REQ-MODEL-07 — Reasoning effort MUST be a unified first-class enum
 
-`ReasoningEffort` MUST contain `OFF`, `LOW`, `MEDIUM`, and `HIGH`. The mapping
-to each provider's request parameter MUST be:
+`ReasoningEffort` MUST contain `OFF`, `LOW`, `MEDIUM`, and `HIGH`. It is passed
+as a first-class, per-call chat argument alongside `messages`/`tools` (see
+REQ-PROV-30), NOT as a field of `InferenceParams` (REQ-MODEL-06). A chat call
+accepts `reasoning: ReasoningEffort | None`; a `None` value means "unset" and is
+resolved to `ReasoningEffort.OFF` semantics before a provider call is built (the
+`None` → `OFF` conversion happens at the provider boundary, see REQ-PROV-30).
+The mapping of each resolved `ReasoningEffort` to a provider's request parameter
+MUST be:
 
 | Unified | OpenAI | OpenRouter | LM Studio | Ollama |
 |---|---|---|---|---|
@@ -417,10 +473,14 @@ to each provider's request parameter MUST be:
 | `LOW` | `reasoning: {"effort": "low"}` | same | `reasoning: "low"` | `think: true` |
 | `MEDIUM` | `reasoning: {"effort": "medium"}` | same | `reasoning: "medium"` | `think: true` |
 | `HIGH` | `reasoning: {"effort": "high"}` | same | `reasoning: "high"` | `think: true` |
-| `None` | omit | omit | omit | omit |
 
 - AC1: Each provider maps every `ReasoningEffort` value per the table.
-- AC2: `None` produces no reasoning-related request parameter.
+- AC2: A resolved `OFF` produces no reasoning-related request parameter for
+  OpenAI/OpenRouter, and the documented "off" parameter for LM Studio
+  (`reasoning: "off"`) and Ollama (`think: false`).
+- AC3: `None` is a legal input value but never reaches a provider request; it
+  is converted (to `OFF` semantics) before request building.
+- AC4: `ReasoningEffort` does not exist on `InferenceParams`.
 
 Test target: per-provider request-building tests.
 
@@ -512,6 +572,15 @@ with logging and error conversion.
   client-level exceptions.
 - AC3: `get_model`/`list_models` return the model subtypes of section 12 and
   never fabricate data for unknown ids (REQ-PROV-08 does not regress).
+- AC4: `embed` has the documented signature
+  `embed(model: EmbedModel, input: str | list[str]) -> EmbeddingResult`;
+  private `_impl`/`_embed_impl` mirrors it. `embed` rejects non-`EmbedModel`
+  arguments with a typed error before any client call (see REQ-PROV-24).
+- AC5: `stream_chat`/`static_chat` accept a `LanguageModel`; `embed` accepts an
+  `EmbedModel`; `list_models`/`get_model` return any subtype.
+- AC6: `stream_chat`/`static_chat` accept `reasoning: ReasoningEffort | None`
+  as a first-class argument parallel to `messages`/`tools` (REQ-PROV-30); `embed`
+  does NOT take a reasoning argument.
 
 Test target: `tests/providers/test_base.py`.
 
@@ -519,30 +588,44 @@ Test target: `tests/providers/test_base.py`.
 
 `stream_chat`/`static_chat` MUST reject non-`LanguageModel` arguments and
 `embed` MUST reject non-`EmbedModel` arguments with a typed error before any
-client call is made.
+client call is made. In addition, `stream_chat`/`static_chat`/`embed` MUST
+reject a model whose `provider_id` differs from the provider's id (REQ-PROV-10).
 
 - AC1: `stream_chat` with an `EmbedModel` raises a typed error; the client is
   never called.
 - AC2: `embed` with a `LanguageModel` raises a typed error; the client is
   never called.
 - AC3: Matching subtypes proceed normally.
+- AC4: A correctly-typed model whose `provider_id` does not match the provider
+  raises a typed error; the client is never called.
 
 Test target: `tests/providers/test_base.py`; per-provider tests.
 
 ### REQ-PROV-25 — Client strategy MUST follow the official SDKs
 
-OpenAI, OpenRouter, and LM Studio MUST use the official OpenAI SDK
-(`AsyncOpenAI`) for chat, streaming, embeddings, and model listing, with the
-configured `provider_timeout` and `provider_max_retries`. Ollama MUST use the
-official Ollama SDK for chat, streaming, embeddings, and model list/show.
-httpx MUST be used only for endpoints without SDK support (LM Studio native
-model listing), and those calls MUST pass the configured timeout.
+OpenAI and LM Studio MUST use the official OpenAI SDK (`AsyncOpenAI`) for chat,
+streaming, embeddings, and model listing. OpenRouter MUST use `AsyncOpenAI` for
+chat, streaming, and embeddings, and MUST use httpx against OpenRouter's native
+`/v1/models` endpoint for model listing (to preserve rich metadata — pricing,
+architecture modality, supported parameters — that the OpenAI SDK's
+`models.list()` does not return). Ollama MUST use the official Ollama SDK
+(`ollama.AsyncClient` from the `ollama` package) for chat, streaming, embeddings,
+and model list/show. httpx MUST be used only for endpoints without SDK support
+(OpenRouter native model listing and LM Studio native model listing), and those
+calls MUST pass the configured timeout.
 
 - AC1: `AsyncOpenAI` is constructed with the configured timeout and max
-  retries.
-- AC2: The Ollama client is constructed with the configured timeout.
-- AC3: LM Studio native listing passes the configured timeout.
-- AC4: No provider uses a client or endpoint other than documented above.
+  retries for OpenAI and LM Studio.
+- AC2: The Ollama client (`ollama.AsyncClient`) is constructed with the
+  configured timeout/host.
+- AC3: OpenRouter native listing and LM Studio native listing pass the
+  configured timeout.
+- AC4: No provider uses a client or endpoint other than documented above:
+  OpenAI → `AsyncOpenAI` only; OpenRouter → `AsyncOpenAI` (chat/stream/embed)
+  + httpx native listing; LM Studio → `AsyncOpenAI` (chat/stream/embed)
+  + httpx native listing; Ollama → `ollama.AsyncClient` for all operations.
+- AC5: The `ollama` package is declared as a project dependency (e.g.
+  `ollama>=0.4`).
 
 Test target: per-provider constructor and call tests.
 
@@ -562,10 +645,12 @@ Test target: `tests/providers/test_ollama.py` — retry tests.
 
 User messages containing image parts MUST be formatted per provider: the
 openai-SDK family uses the content-array form; Ollama uses its documented
-image field mapping.
+`images` array of base64-encoded strings (without the `data:image/...;base64,`
+prefix).
 
 - AC1: A message with an image part produces the provider's documented image
-  representation.
+  representation (content-array for OpenAI/LM Studio/OpenRouter; `images`
+  base64 array for Ollama).
 - AC2: Plain string messages are unchanged.
 
 Test target: per-provider message-formatting tests.
@@ -596,6 +681,27 @@ classify as `ModelType.EMBED`; `audio`/`image` keywords MUST classify as
 
 Test target: per-provider classification tests; OpenAI `_format_model` tests.
 
+### REQ-PROV-30 — ReasoningEffort MUST be a first-class chat argument
+
+`ReasoningEffort` is passed to chat methods as a first-class per-call argument,
+parallel to `messages` and `tools`, and is NOT stored in `InferenceParams` or on
+the `Session`. Each chat call carries an independent `reasoning` value. Because
+the value may be unset (`None`) or `OFF`, each provider MUST resolve `None` to
+`OFF` semantics before building the request, per the REQ-MODEL-07 table.
+
+- AC1: `stream_chat`/`static_chat` accept `reasoning: ReasoningEffort | None`;
+  the value is threaded to the request exactly once per call.
+- AC2: A `None` argument is resolved to `OFF` semantics before request building;
+  it is never sent as an explicit request field (REQ-MODEL-07 AC3).
+- AC3: Reasoning translation is independent of `InferenceParams` serialization
+  (REQ-PROV-14): omitting unset params does not add or remove the reasoning
+  argument, and vice-versa.
+- AC4: `embed` does not accept a reasoning argument.
+- AC5: Changing reasoning between two calls to the same provider does not change
+  any persisted session state (reasoning is ephemeral).
+
+Test target: per-provider request-building tests; `tests/providers/test_base.py`.
+
 ## 15. Architecture — Consumer integration
 
 ### REQ-SERV-01 — ChatService MUST consume the StreamEvent union
@@ -609,6 +715,11 @@ content, tool calls, finish reason, and usage.
 - AC2: A usage-only final chunk yields no error and the usage lands on the
   final `AgentDoneEvent`.
 - AC3: The assembled `AssistantMessage` carries `usage` and `finish_reason`.
+- AC4: ChatService forwards `reasoning: ReasoningEffort | None` to
+  `stream_chat` as an ephemeral per-call argument (REQ-PROV-30). It is not
+  read from or written to the `Session`; a `None`/unset value is passed through
+  as-is for the provider to resolve. Agentic-loop intermediate turns carry the
+  same reasoning value unless the caller supplies a different one each call.
 
 Test target: `tests/services/` — chat tests.
 
@@ -624,6 +735,21 @@ without flattening. `get_provider_by_model` MUST dispatch on
   listing) is preserved.
 
 Test target: `tests/services/` — model service tests.
+
+### REQ-SERV-03 — ChatService MUST NOT crash on malformed streamed tool-call arguments
+
+Because streamed tool-call arguments arrive as raw JSON fragments accumulated
+across chunks (REQ-MODEL-11), the assembled string may be empty or invalid JSON.
+ChatService MUST NOT let a `JSONDecodeError` escape the agentic loop; malformed
+accumulated arguments normalize to an empty arguments dict and the loop continues.
+
+- AC1: Streamed tool-call arguments that produce invalid JSON yield a `ToolCall`
+  with an empty arguments dict (`{}`) and no exception, and the loop continues.
+- AC2: Valid accumulated arguments parse as before.
+- AC3: This complements REQ-PROV-03 (provider-side static parsing) without
+  regressing provider behavior.
+
+Test target: `tests/services/` — chat/tool-loop tests.
 
 ### REQ-CLI-01 — CLI model listing MUST accept the embedding type
 
@@ -642,6 +768,9 @@ fields where present, and show a placeholder when absent.
 
 - AC1: A model with pricing renders input/output/request values.
 - AC2: A model without pricing renders a placeholder without error.
+- AC3: The CLI renders a dedicated Pricing column built from
+  `ModelPricing.input`/`.output`/`.request`; absent pricing renders a `-`
+  placeholder without error.
 
 Test target: `tests/cli/`.
 
@@ -653,6 +782,9 @@ type and serialize subtype-specific fields without error.
 - AC1: `?model_type=embedding` returns only embedding models.
 - AC2: The JSON response includes subtype fields (e.g. `embedding_dimensions`,
   `supports_tools`) with absent fields as `null`.
+- AC3: The routes declare a discriminated-union response model
+  (`LanguageModel | EmbedModel | ModelData` keyed on `type`) so subtype fields
+  serialize correctly for both listing and single-model responses.
 
 Test target: `tests/api/` — model route tests.
 
@@ -662,10 +794,27 @@ Test target: `tests/api/` — model route tests.
 |---|---|
 | REQ-PROV-01 | Superseded by REQ-PROV-21: the usage-only final chunk is expressed as the final `StreamEndEvent`; the stream must still complete cleanly. |
 | REQ-PROV-02 | Superseded by REQ-PROV-21: token usage is delivered on the `StreamEndEvent` as `TokenUsage`; absent usage → `usage=None`. |
-| REQ-PROV-04 | Extended by REQ-PROV-25/26: official SDK clients carry timeout/retries; the Ollama SDK retry gap is closed by a retry layer; httpx calls pass the configured timeout. |
+| REQ-PROV-04 | Extended by REQ-PROV-25/26: official SDK clients carry timeout/retries; the Ollama SDK retry gap is closed by a retry layer; httpx calls pass the configured timeout. AC2 (2026-08-04) names OpenRouter and LM Studio native listing and requires the httpx client to carry `provider_timeout`. |
+| REQ-PROV-08 | AC3 added (2026-08-04): list-then-search providers (OpenRouter, LM Studio) raise `ModelsFetchError` for models absent from their listing; no fallback fabrication. |
 | REQ-PROV-09 | AC2 amended by REQ-PROV-29: `embed` keyword → `ModelType.EMBED`; `audio`/`image` → `ModelType.OTHER`. |
-| REQ-PROV-10 | Extended by REQ-PROV-24: invocation guards use model subtypes. |
-| REQ-PROV-20 | Extended by REQ-PROV-28: `embed` failures raise `ModelInvocationError`. |
+| REQ-PROV-10 | Extended by REQ-PROV-24: invocation guards use model subtypes. AC4 added (2026-08-04): provider-id mismatch on a `LanguageModel` raises `ModelTypeError` for both `stream_chat` and `static_chat`. |
+| REQ-PROV-18 | AC4 (2026-08-04): precedence pinned — OpenAI/LM Studio/OpenRouter use `reasoning_content` only (no `reasoning` fallback); Ollama native uses `message.thinking`; empty → `None`. Corrects prior wrong-precedence behavior. |
+| REQ-PROV-20 | AC3/AC4 added (2026-08-04): SDK-specific exceptions surface as typed errors; only `InferenceProviderError` subtypes cross the boundary. |
+| REQ-PROV-23 | AC4/AC5 added (2026-08-04): `embed(model: EmbedModel, input) -> EmbeddingResult`; `stream_chat`/`static_chat` take `LanguageModel`, `embed` takes `EmbedModel`. |
+| REQ-PROV-25 | Updated (2026-08-04): OpenRouter uses `AsyncOpenAI` for chat/stream/embed + httpx native listing; LM Studio uses `AsyncOpenAI` + httpx native listing; Ollama uses `ollama.AsyncClient` for all operations; `ollama` is a declared dependency. |
+| REQ-PROV-27 | AC1 updated (2026-08-04): Ollama images use the `images` base64 array; OpenAI family uses content-array. |
+| REQ-PROV-28 | Extended by note (2026-08-04): Ollama native `/api/embed` maps `prompt_eval_count` to `TokenUsage`. |
+| REQ-MODEL-02 | AC5 added (2026-08-04): providers construct the correct subtype, never a bare `ModelData` for a classified model. |
+| REQ-MODEL-03 | AC4 added (2026-08-04): OpenRouter pricing normalized to per-million `input`/`output` + `request`; unmatched fields dropped. |
+| REQ-PROV-17 | AC1 extended (2026-08-04): metadata tests also assert `supports_reasoning`, `reasoning_levels`, `supports_streaming`, `pricing`. |
+| REQ-CLI-02 | AC3 added (2026-08-04): dedicated Pricing column from `ModelPricing`; absent → `-`. |
+| REQ-API-01 | AC3 added (2026-08-04): discriminated-union response model for subtype serialization. |
+| NEW REQ-PROV-30 | (2026-08-04) `ReasoningEffort` is a first-class, per-call chat argument (not in `InferenceParams` or on `Session`); `None` resolves to `OFF` semantics before a provider request is built. |
+| REQ-MODEL-06 | Updated (2026-08-04): `reasoning_effort` removed from `InferenceParams`; AC4 asserts `InferenceParams` can never carry reasoning. |
+| REQ-MODEL-07 | Updated (2026-08-04): rewritten as first-class enum; `None` is legal input but resolved to `OFF` before request building; no `None` row in the provider mapping table. |
+| REQ-PROV-23 | AC6 added (2026-08-04): `stream_chat`/`static_chat` accept `reasoning: ReasoningEffort | None`; `embed` does not. |
+| REQ-SERV-01 | AC4 added (2026-08-04): ChatService forwards reasoning as an ephemeral per-call argument; never read from or written to `Session`. |
+| NEW REQ-SERV-03 | (2026-08-04) ChatService normalizes malformed accumulated tool-call arguments to `{}` instead of crashing. |
 
 ---
 
@@ -673,4 +822,8 @@ Test target: `tests/api/` — model route tests.
 
 - None. Sections 12-16 record the architecture requirements agreed on
   2026-08-01; behavioral requirements 1-11 remain complete for the 2026-07-31
-  review issues.
+  review issues. The 2026-08-04 addendum resolves the remaining gaps from the
+  robustness review — OpenRouter/Ollama client strategy, model subtype
+  construction, tool-call accumulation, the `embed` contract, reasoning
+  precedence — and promotes `ReasoningEffort` to a first-class, ephemeral
+  chat argument (REQ-PROV-30).
