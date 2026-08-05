@@ -2,7 +2,7 @@
 
 from typing import List
 
-from yapa.models import InferenceParams, Message, ModelData, Session
+from yapa.models import InferenceParams, LanguageModel, Message, Session
 from yapa.services.store import SessionStore
 
 
@@ -72,7 +72,7 @@ class SessionService:
         self,
         session_id: str,
         messages: List[Message],
-        model: ModelData | None = None,
+        model: LanguageModel | None = None,
     ) -> Session:
         """Append messages to a session, optionally update model, and persist."""
         try:

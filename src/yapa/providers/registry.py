@@ -1,8 +1,12 @@
 """Provider registry — attempts to initialize all known providers."""
 
+import logging
+
 from yapa.services.config import Config, JsonConfigStore
 
 from .base import InferenceProvider
+
+logger = logging.getLogger(__name__)
 
 
 class ProviderNotAvailableError(Exception):
@@ -13,9 +17,10 @@ class ProviderRegistry:
     """
     Registry that surfaces available and failed providers.
 
-    Attempts to initialize all registered provider classes. Providers that
-    fail initialization (e.g. missing API keys) are tracked separately
-    rather than failing the entire registry.
+    Providers that fail initialization are keyed by provider id when one could
+    be determined, else by class name (see REQ-PROV-06). The id comes from a
+    per-provider class constant ``PROVIDER_ID``. A provider whose constructor
+    raises is recorded in ``failures`` and logged at error level.
     """
 
     def __init__(
@@ -24,26 +29,36 @@ class ProviderRegistry:
         config: Config | None = None,
     ) -> None:
         """
-        Initialize the registry.
+        Initialize the registry, attempting each provider class.
 
-        Attempts to instantiate each provider class. Providers that fail
-        (e.g. missing API keys) are recorded in ``failures`` rather than
-        raising.
+        Providers that fail (e.g. missing API keys) are recorded in
+        ``failures`` and logged rather than failing the whole registry. When a
+        provider id can be determined (via the ``PROVIDER_ID`` class constant),
+        the failure is keyed by that id; otherwise it falls back to the class
+        name.
 
         Args:
             provider_classes: Provider classes to register.
-            config: Application config. Falls back to ``get_config()``.
+            config: Application config. Falls back to ``JsonConfigStore``.
         """
         self._available: dict[str, InferenceProvider] = {}
         self._failures: dict[str, str] = {}
 
         cfg = config or JsonConfigStore().load()
         for cls in provider_classes:
-            try:
-                instance = cls(config=cfg)  # type: ignore
-                self._available[instance.id] = instance
-            except Exception as e:
-                self._failures[cls.__name__] = str(e)
+            self._register(cls, cfg)
+
+    def _register(self, cls: type[InferenceProvider], cfg: Config) -> None:
+        key = cls.__name__
+        try:
+            instance = cls(config=cfg)  # type: ignore
+            self._available[instance.id] = instance
+        except Exception as e:
+            id_key = getattr(cls, "PROVIDER_ID", None)
+            if id_key is not None:
+                key = id_key
+            self._failures[key] = str(e)
+            logger.error("Provider %s failed to initialize: %s", key, e)
 
     @property
     def available(self) -> list[InferenceProvider]:
@@ -52,7 +67,7 @@ class ProviderRegistry:
 
     @property
     def failures(self) -> dict[str, str]:
-        """Providers that failed to initialize, keyed by class name."""
+        """Providers that failed to initialize, keyed by id or class name."""
         return dict(self._failures)
 
     def is_available(self, provider_id: str) -> bool:
@@ -61,7 +76,7 @@ class ProviderRegistry:
 
     def get(self, provider_id: str) -> InferenceProvider:
         """
-        Get a provider by ID.
+        Return an available provider or raise with a diagnostic message.
 
         Args:
             provider_id: The provider identifier.
@@ -70,10 +85,15 @@ class ProviderRegistry:
             The provider instance.
 
         Raises:
-            ProviderNotAvailableError: If the provider is not available
-                (unregistered or failed to initialize).
+            ProviderNotAvailableError: If the provider is unregistered or
+                failed to initialize, with the stored failure reason when
+                applicable.
         """
-        try:
+        if provider_id in self._available:
             return self._available[provider_id]
-        except KeyError:
-            raise ProviderNotAvailableError(f"Provider '{provider_id}' not found.")
+        reason = self._failures.get(provider_id)
+        if reason is not None:
+            raise ProviderNotAvailableError(
+                f"Provider '{provider_id}' failed to initialize: {reason}"
+            )
+        raise ProviderNotAvailableError(f"Provider '{provider_id}' is unknown.")

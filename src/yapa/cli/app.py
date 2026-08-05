@@ -178,19 +178,53 @@ def config_set(
 # ----- models -----
 
 
+def _pricing_label(m) -> str:
+    """Render a model's pricing as a CLI table cell, or '-' if absent."""
+    p = getattr(m, "pricing", None)
+    if p is None:
+        return "-"
+    parts = []
+    if p.input is not None:
+        parts.append(f"in ${p.input:g}/1M")
+    if p.output is not None:
+        parts.append(f"out ${p.output:g}/1M")
+    if p.request is not None:
+        parts.append(f"req ${p.request:g}")
+    return " ".join(parts) or "-"
+
+
+def _comma_formatting(value: str) -> str:
+    """Format a number with commas as thousands separators."""
+    try:
+        value_f = int(value)
+    except ValueError:
+        return value
+    return f"{value_f:,}"
+
+
 @cli.command()
 def models(
     provider: str | None = typer.Option(
         None, "--provider", "-p", help="Filter by provider ID"
     ),
     model_type: str | None = typer.Option(
-        None, "--model-type", "-t", help="Filter by model type (llm or embedding)"
+        None,
+        "--model-type",
+        "-t",
+        help="Filter by model type: llm, embedding, or other",
     ),
 ):
     """List available models."""
     from yapa.models import ModelType
 
-    model_type_enum = ModelType(model_type) if model_type else None
+    model_type_enum = None
+    if model_type:
+        try:
+            model_type_enum = ModelType(model_type)
+        except ValueError:
+            available = ", ".join(m.value for m in ModelType)
+            _error(f"Invalid model type '{model_type}'. Must be one of: {available}")
+            raise typer.Exit(code=1)
 
     service = ModelService()
     results = asyncio.run(
@@ -210,14 +244,16 @@ def models(
     table.add_column("Type")
     table.add_column("Context")
     table.add_column("Output")
+    table.add_column("Pricing")
 
     for m in results:
         table.add_row(
             m.provider_id,
             m.id,
-            m.type.value,
-            str(m.context_length or "-"),
-            str(m.max_output or "-"),
+            m.type if isinstance(m.type, str) else m.type.value,
+            _comma_formatting(str(getattr(m, "context_length", None) or "-")),
+            _comma_formatting(str(getattr(m, "max_output", None) or "-")),
+            _pricing_label(m),
         )
 
     console.print(table)

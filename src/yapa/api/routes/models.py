@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from yapa.models import ModelData, ModelType
+from yapa.models import ModelDataUnion, ModelType
 from yapa.services import ModelService
 
 from ..dependencies import get_model_service
@@ -10,7 +10,7 @@ from ..dependencies import get_model_service
 router = APIRouter(tags=["models"])
 
 
-@router.get("/models", response_model=list[ModelData])
+@router.get("/models", response_model=list[ModelDataUnion])
 async def list_models(
     provider_id: str | None = None,
     model_type: str | None = None,
@@ -32,7 +32,7 @@ async def list_models(
     )
 
 
-@router.get("/models/{full_id:path}", response_model=ModelData)
+@router.get("/models/{full_id:path}", response_model=ModelDataUnion)
 async def get_model(
     full_id: str,
     model_service: ModelService = Depends(get_model_service),

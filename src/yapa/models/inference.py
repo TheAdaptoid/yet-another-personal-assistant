@@ -1,6 +1,7 @@
 """Data models for inference-related data."""
 
 from enum import Enum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -9,6 +10,7 @@ class ModelType(Enum):
     """Enumeration for model types."""
 
     LLM = "llm"
+    EMBED = "embedding"
     OTHER = "other"
 
 
@@ -28,56 +30,50 @@ class TokenUsage(BaseModel):
 
 
 class InferenceParams(BaseModel):
-    """
-    Parameters for model inference.
-
-    Attributes:
-        temperature: Sampling temperature (0.0 to 2.0). Higher = more creative.
-        max_tokens: Maximum tokens to generate. None = use model default.
-        top_p: Nucleus sampling threshold. Lower = more focused.
-    """
+    """Curated set of typed inference parameters."""
 
     temperature: float | None = Field(default=None, ge=0.0, le=2.0)
     max_tokens: int | None = Field(default=None, ge=1)
     top_p: float | None = Field(default=None, ge=0.0, le=1.0)
+    presence_penalty: float | None = Field(default=None, ge=-2.0, le=2.0)
+    frequency_penalty: float | None = Field(default=None, ge=-2.0, le=2.0)
+    stop: str | list[str] | None = Field(default=None)
+    seed: int | None = Field(default=None)
+    top_k: int | None = Field(default=None, ge=0)
+    min_p: float | None = Field(default=None, ge=0.0, le=1.0)
+    repeat_penalty: float | None = Field(default=None, ge=0.0)
+
+
+class ModelPricing(BaseModel):
+    """Pricing for a model in USD per million tokens."""
+
+    input: float | None = Field(default=None)
+    output: float | None = Field(default=None)
+    request: float | None = Field(default=None)
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
 
 class ModelData(BaseModel):
     """
-    Data model for representing a language model.
+    Base data model for representing a provider model.
 
     Attributes:
         id (str): Unique identifier for the model.
         provider_id (str): Identifier for the provider of the model.
         type (ModelType): The type of the model.
-        context_length (int | None): Maximum context length in tokens.
-        max_output (int | None): Maximum output tokens.
-        supports_tools (bool): Whether the model supports tool/function calling.
-        supports_vision (bool): Whether the model supports image inputs.
-        pricing (dict[str, float] | None): Per-token pricing in USD per million tokens.
+        name (str | None): Human-readable model name.
+        description (str | None): Human-readable model description.
     """
 
     id: str = Field(..., description="Unique identifier for the model")
     provider_id: str = Field(
         ..., description="Identifier for the provider of the model"
     )
-    type: ModelType = Field(..., description="The type of the model (e.g., 'llm')")
-    context_length: int | None = Field(
-        default=None, description="Maximum context length in tokens"
-    )
-    max_output: int | None = Field(default=None, description="Maximum output tokens")
-    supports_tools: bool = Field(
-        default=False, description="Whether the model supports tool/function calling"
-    )
-    supports_vision: bool = Field(
-        default=False, description="Whether the model supports image inputs"
-    )
-    pricing: dict[str, float] | None = Field(
-        default=None,
-        description=(
-            "Per-token pricing in USD per million tokens,"
-            " e.g. {'input': 2.50, 'output': 10.00}"
-        ),
+    type: ModelType = Field(..., description="The type of the model")
+    name: str | None = Field(default=None, description="Human-readable model name")
+    description: str | None = Field(
+        default=None, description="Human-readable model description"
     )
 
     @property
@@ -85,60 +81,39 @@ class ModelData(BaseModel):
         """Return the fully-qualified model identifier (e.g. ``openai:gpt-4``)."""
         return f"{self.provider_id}:{self.id}"
 
-    # Immutable and strict model configuration
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
-class ToolCallDelta(BaseModel):
-    """
-    Represents a delta in a tool call response.
+class LanguageModel(ModelData):
+    """An LLM, carrying LLM-specific capability fields."""
 
-    Attributes:
-        index (int): The index of the tool call in the response sequence.
-        id (str | None): The unique identifier of the tool call, if available.
-        name (str | None): The name of the tool being called, if available.
-        arguments (str | None): The arguments passed to the tool, if available.
-    """
-
-    index: int
-    id: str | None = Field(default=None)
-    name: str | None = Field(default=None)
-    arguments: str | None = Field(default=None)
+    type: Literal["llm"] = "llm"
+    context_length: int | None = Field(default=None)
+    max_output: int | None = Field(default=None)
+    supports_tools: bool = Field(default=False)
+    supports_vision: bool = Field(default=False)
+    supports_reasoning: bool = Field(default=False)
 
 
-class StreamDelta(BaseModel):
-    """
-    Represents a delta in a streaming response.
+    pricing: ModelPricing | None = Field(default=None)
 
-    Attributes:
-        content (str | None): The content of the delta, if any.
-        reasoning_content (str | None): The reasoning content of the delta, if any.
-        tool_calls (list[ToolCallDelta]): A list of tool call deltas associated with
-            this stream delta.
-        error (str | None): Error message if an error occurred during streaming.
-        finish_reason (str | None): Why the stream finished (stop, length,
-            content_filter, tool_calls).
-        usage (TokenUsage | None): Token usage for the completed stream.
-    """
 
-    content: str | None = Field(
-        default=None, description="The content of the delta, if any"
-    )
-    reasoning_content: str | None = Field(
-        default=None, description="The reasoning content of the delta, if any"
-    )
-    tool_calls: list[ToolCallDelta] = Field(
-        default_factory=list,
-        description="A list of tool call deltas associated with this stream delta",
-    )
-    error: str | None = Field(
-        default=None, description="Error message if an error occurred during streaming"
-    )
-    finish_reason: str | None = Field(
-        default=None,
-        description="Why the stream finished: stop, length, content_filter, tool_calls",
-    )
-    usage: TokenUsage | None = Field(
-        default=None,
-        description="Token usage for the completed stream",
-    )
+class EmbedModel(ModelData):
+    """An embedding model, carrying embedding-specific fields."""
+
+    type: Literal["embedding"] = "embedding"
+    embedding_dimensions: int | None = Field(default=None)
+    normalized: bool = Field(default=False)
+    pricing: ModelPricing | None = Field(default=None)
+
+
+ModelDataUnion = LanguageModel | EmbedModel | ModelData
+
+
+class ReasoningEffort(Enum):
+    """Unified reasoning effort level, passed as a first-class chat argument."""
+
+    OFF = "off"
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"

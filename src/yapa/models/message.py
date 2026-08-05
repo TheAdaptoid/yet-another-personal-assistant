@@ -2,11 +2,35 @@
 
 from typing import Annotated, Literal
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from .base import TrackedEntity
 from .inference import TokenUsage
 from .tool import ToolCall
+
+
+class TextPart(BaseModel):
+    """A text content part."""
+
+    type: Literal["text"] = "text"
+    text: str
+
+
+class ImageUrl(BaseModel):
+    """A URL (http(s) or data URL) plus an optional detail hint."""
+
+    url: str
+    detail: str | None = Field(default=None)
+
+
+class ImagePart(BaseModel):
+    """An image content part."""
+
+    type: Literal["image_url"] = "image_url"
+    image_url: ImageUrl
+
+
+ContentPart = Annotated[TextPart | ImagePart, Field(discriminator="type")]
 
 
 class BaseMessage(TrackedEntity):
@@ -32,6 +56,7 @@ class UserMessage(BaseMessage):
     """
 
     role: Literal["user"] = "user"
+    content: str | list[ContentPart]
 
 
 class SystemMessage(BaseMessage):
