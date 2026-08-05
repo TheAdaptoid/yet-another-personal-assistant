@@ -5,11 +5,8 @@ from unittest.mock import MagicMock
 import pytest
 
 from yapa.models import (
-    ModelData,
-    ModelType,
-    StreamDelta,
+    LanguageModel,
     TokenUsage,
-    ToolCallDelta,
     UserMessage,
 )
 from yapa.models.event import (
@@ -17,6 +14,11 @@ from yapa.models.event import (
     AgentErrorEvent,
     ToolCallEvent,
     ToolResultEvent,
+)
+from yapa.models.stream import (
+    ContentDelta,
+    StreamEndEvent,
+    ToolCallDeltaEvent,
 )
 from yapa.models.tool import ToolApprovalRequest, ToolApprovalResponse
 from yapa.services.chat import ChatService
@@ -85,7 +87,7 @@ def chat(models, sessions, registry):
     return ChatService(sessions=sessions, models=models, tools=registry)
 
 
-model = ModelData(id="gpt-4", provider_id="openai", type=ModelType.LLM)
+model = LanguageModel(id="gpt-4", provider_id="openai")
 
 
 class TestToolLoop:
@@ -94,9 +96,9 @@ class TestToolLoop:
         session = sessions.create()
         provider = models.get_provider_by_model.return_value
 
-        async def _stream(model, messages, tools=None, params=None):
-            yield StreamDelta(
-                content="Hello",
+        async def _stream(model, messages, tools=None, params=None, reasoning=None):
+            yield ContentDelta(content="Hello")
+            yield StreamEndEvent(
                 finish_reason="stop",
                 usage=TokenUsage(prompt_tokens=1, completion_tokens=1, total_tokens=2),
             )
@@ -118,23 +120,20 @@ class TestToolLoop:
         provider = models.get_provider_by_model.return_value
         call_count = 0
 
-        async def _stream(model, messages, tools=None, params=None):
+        async def _stream(model, messages, tools=None, params=None, reasoning=None):
             nonlocal call_count
             call_count += 1
             if call_count == 1:
-                yield StreamDelta(
-                    tool_calls=[
-                        ToolCallDelta(
-                            index=0,
-                            id="call_1",
-                            name="echo",
-                            arguments='{"input": "hi"}',
-                        )
-                    ],
-                    finish_reason="tool_calls",
+                yield ToolCallDeltaEvent(
+                    index=0,
+                    id="call_1",
+                    name="echo",
+                    arguments='{"input": "hi"}',
                 )
+                yield StreamEndEvent(finish_reason="tool_calls")
             else:
-                yield StreamDelta(content="Done", finish_reason="stop")
+                yield ContentDelta(content="Done")
+                yield StreamEndEvent(finish_reason="stop")
 
         provider.stream_chat.side_effect = _stream
 
@@ -153,23 +152,20 @@ class TestToolLoop:
 
         call_count = 0
 
-        async def _stream(model, messages, tools=None, params=None):
+        async def _stream(model, messages, tools=None, params=None, reasoning=None):
             nonlocal call_count
             call_count += 1
             if call_count == 1:
-                yield StreamDelta(
-                    tool_calls=[
-                        ToolCallDelta(
-                            index=0,
-                            id="call_1",
-                            name="echo",
-                            arguments='{"input": "hi"}',
-                        )
-                    ],
-                    finish_reason="tool_calls",
+                yield ToolCallDeltaEvent(
+                    index=0,
+                    id="call_1",
+                    name="echo",
+                    arguments='{"input": "hi"}',
                 )
+                yield StreamEndEvent(finish_reason="tool_calls")
             else:
-                yield StreamDelta(content="Done", finish_reason="stop")
+                yield ContentDelta(content="Done")
+                yield StreamEndEvent(finish_reason="stop")
 
         provider.stream_chat.side_effect = _stream
 
@@ -188,23 +184,20 @@ class TestToolLoop:
 
         call_count = 0
 
-        async def _stream(model, messages, tools=None, params=None):
+        async def _stream(model, messages, tools=None, params=None, reasoning=None):
             nonlocal call_count
             call_count += 1
             if call_count == 1:
-                yield StreamDelta(
-                    tool_calls=[
-                        ToolCallDelta(
-                            index=0,
-                            id="call_1",
-                            name="echo",
-                            arguments='{"input": "hi"}',
-                        )
-                    ],
-                    finish_reason="tool_calls",
+                yield ToolCallDeltaEvent(
+                    index=0,
+                    id="call_1",
+                    name="echo",
+                    arguments='{"input": "hi"}',
                 )
+                yield StreamEndEvent(finish_reason="tool_calls")
             else:
-                yield StreamDelta(content="Done", finish_reason="stop")
+                yield ContentDelta(content="Done")
+                yield StreamEndEvent(finish_reason="stop")
 
         provider.stream_chat.side_effect = _stream
 
@@ -226,20 +219,17 @@ class TestToolLoop:
 
         call_count = 0
 
-        async def _stream(model, messages, tools=None, params=None):
+        async def _stream(model, messages, tools=None, params=None, reasoning=None):
             nonlocal call_count
             call_count += 1
             if call_count == 1:
-                yield StreamDelta(
-                    tool_calls=[
-                        ToolCallDelta(
-                            index=0, id="call_1", name="dangerous", arguments="{}"
-                        )
-                    ],
-                    finish_reason="tool_calls",
+                yield ToolCallDeltaEvent(
+                    index=0, id="call_1", name="dangerous", arguments="{}"
                 )
+                yield StreamEndEvent(finish_reason="tool_calls")
             else:
-                yield StreamDelta(content="Done", finish_reason="stop")
+                yield ContentDelta(content="Done")
+                yield StreamEndEvent(finish_reason="stop")
 
         provider.stream_chat.side_effect = _stream
 
@@ -269,21 +259,18 @@ class TestToolLoop:
         call_count = 0
         prompts_seen = []
 
-        async def _stream(model, messages, tools=None, params=None):
+        async def _stream(model, messages, tools=None, params=None, reasoning=None):
             nonlocal call_count
             call_count += 1
             prompts_seen.append(len(messages))
             if call_count == 1:
-                yield StreamDelta(
-                    tool_calls=[
-                        ToolCallDelta(
-                            index=0, id="call_1", name="dangerous", arguments="{}"
-                        )
-                    ],
-                    finish_reason="tool_calls",
+                yield ToolCallDeltaEvent(
+                    index=0, id="call_1", name="dangerous", arguments="{}"
                 )
+                yield StreamEndEvent(finish_reason="tool_calls")
             else:
-                yield StreamDelta(content="Ok", finish_reason="stop")
+                yield ContentDelta(content="Ok")
+                yield StreamEndEvent(finish_reason="stop")
 
         provider.stream_chat.side_effect = _stream
 
@@ -309,20 +296,17 @@ class TestToolLoop:
 
         call_count = 0
 
-        async def _stream(model, messages, tools=None, params=None):
+        async def _stream(model, messages, tools=None, params=None, reasoning=None):
             nonlocal call_count
             call_count += 1
             if call_count == 1:
-                yield StreamDelta(
-                    tool_calls=[
-                        ToolCallDelta(
-                            index=0, id="call_1", name="nonexistent", arguments="{}"
-                        )
-                    ],
-                    finish_reason="tool_calls",
+                yield ToolCallDeltaEvent(
+                    index=0, id="call_1", name="nonexistent", arguments="{}"
                 )
+                yield StreamEndEvent(finish_reason="tool_calls")
             else:
-                yield StreamDelta(content="Ok", finish_reason="stop")
+                yield ContentDelta(content="Ok")
+                yield StreamEndEvent(finish_reason="stop")
 
         provider.stream_chat.side_effect = _stream
 
@@ -340,20 +324,17 @@ class TestToolLoop:
 
         call_count = 0
 
-        async def _stream(model, messages, tools=None, params=None):
+        async def _stream(model, messages, tools=None, params=None, reasoning=None):
             nonlocal call_count
             call_count += 1
             if call_count == 1:
-                yield StreamDelta(
-                    tool_calls=[
-                        ToolCallDelta(
-                            index=0, id="call_1", name="failing", arguments="{}"
-                        )
-                    ],
-                    finish_reason="tool_calls",
+                yield ToolCallDeltaEvent(
+                    index=0, id="call_1", name="failing", arguments="{}"
                 )
+                yield StreamEndEvent(finish_reason="tool_calls")
             else:
-                yield StreamDelta(content="Ok", finish_reason="stop")
+                yield ContentDelta(content="Ok")
+                yield StreamEndEvent(finish_reason="stop")
 
         provider.stream_chat.side_effect = _stream
 
@@ -368,15 +349,11 @@ class TestToolLoop:
         session = sessions.create()
         provider = models.get_provider_by_model.return_value
 
-        async def _stream(model, messages, tools=None, params=None):
-            yield StreamDelta(
-                tool_calls=[
-                    ToolCallDelta(
-                        index=0, id="call_1", name="echo", arguments='{"input": "x"}'
-                    )
-                ],
-                finish_reason="tool_calls",
+        async def _stream(model, messages, tools=None, params=None, reasoning=None):
+            yield ToolCallDeltaEvent(
+                index=0, id="call_1", name="echo", arguments='{"input": "x"}'
             )
+            yield StreamEndEvent(finish_reason="tool_calls")
 
         provider.stream_chat.side_effect = _stream
 
@@ -395,23 +372,20 @@ class TestToolLoop:
 
         call_count = 0
 
-        async def _stream(model, messages, tools=None, params=None):
+        async def _stream(model, messages, tools=None, params=None, reasoning=None):
             nonlocal call_count
             call_count += 1
             if call_count == 1:
-                yield StreamDelta(
-                    tool_calls=[
-                        ToolCallDelta(
-                            index=0,
-                            id="call_1",
-                            name="echo",
-                            arguments='{"input": "x"}',
-                        )
-                    ],
-                    finish_reason="tool_calls",
+                yield ToolCallDeltaEvent(
+                    index=0,
+                    id="call_1",
+                    name="echo",
+                    arguments='{"input": "x"}',
                 )
+                yield StreamEndEvent(finish_reason="tool_calls")
             else:
-                yield StreamDelta(content="Done", finish_reason="stop")
+                yield ContentDelta(content="Done")
+                yield StreamEndEvent(finish_reason="stop")
 
         provider.stream_chat.side_effect = _stream
 

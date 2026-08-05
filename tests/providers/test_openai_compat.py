@@ -1,603 +1,261 @@
-"""Tests for OpenAICompatibleProvider."""
+"""Tests for OpenAICompatibleProvider base: classification, formatting, requests."""
 
-import json
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
+from unittest.mock import patch
 
 from yapa.models import (
     AssistantMessage,
+    EmbedModel,
     InferenceParams,
+    LanguageModel,
+    ModelData,
     ModelType,
-    StreamDelta,
-    ToolCall,
-    ToolCallDelta,
-    ToolMessage,
+    ReasoningEffort,
     UserMessage,
 )
-from yapa.providers.openai import OpenAIIP
-from yapa.providers.openai_compat import OpenAICompatibleProvider
+from yapa.models.message import ImagePart, TextPart
+from yapa.providers.openai.openai_compat import OpenAICompatibleProvider
 
 
-def _chunk(
-    content=None,
-    reasoning_content=None,
-    tool_calls=None,
-    finish_reason=None,
-    usage=None,
-    **extra,
-):
-    attrs = {
-        "content": content,
-        "reasoning_content": reasoning_content,
-        "tool_calls": tool_calls,
-    }
-    attrs.update(extra)
-    delta = SimpleNamespace(**attrs)
-    choice = SimpleNamespace(delta=delta, finish_reason=finish_reason)
-    return SimpleNamespace(choices=[choice], usage=usage)
+class _Concrete(OpenAICompatibleProvider):
+    pass
 
 
-async def _stream(*chunks):
-    for c in chunks:
-        yield c
+def _make(*args, **kwargs) -> _Concrete:
+    return _Concrete(*args, **kwargs)
 
 
-class _Model:
-    def __init__(self, id):
-        self.id = id
+# ── Client construction ──
 
 
-class _TC:
-    def __init__(self, index, id=None, name=None, arguments=None):
-        self.index = index
-        self.id = id
-        self.function = SimpleNamespace(name=name, arguments=arguments)
-
-
-@pytest.fixture
-def compat_provider(mock_openai_client):
-    with patch(
-        "yapa.providers.openai_compat.AsyncOpenAI", return_value=mock_openai_client
-    ):
-        provider = OpenAICompatibleProvider(
-            identifier="test",
-            name="Test",
-            api_key="test-key",
-            base_url="http://test",
+def test_client_built_with_timeout_and_retries() -> None:
+    with patch("yapa.providers.openai._noauth.AsyncOpenAI") as mk:
+        _make(
+            identifier="x",
+            name="X",
+            api_key="sk-1",
+            base_url="https://example.com/v1",
             timeout=120,
+            max_retries=2,
         )
-        provider._client = mock_openai_client
-        return provider
-
-
-class TestFormatModel:
-    """Tests for OpenAICompatibleProvider._format_model()."""
-
-    def test_llm_model(self, compat_provider) -> None:
-        result = compat_provider._format_model("gpt-4")
-        assert result.type == ModelType.LLM
-
-    def test_embed_model(self, compat_provider) -> None:
-        result = compat_provider._format_model("text-embedding-3")
-        assert result.type == ModelType.OTHER
-
-    def test_audio_model(self, compat_provider) -> None:
-        result = compat_provider._format_model("my-audio-model")
-        assert result.type == ModelType.OTHER
-
-    def test_image_model(self, compat_provider) -> None:
-        result = compat_provider._format_model("my-image-model")
-        assert result.type == ModelType.OTHER
-
-
-class TestListModelsImpl:
-    """Tests for OpenAICompatibleProvider._list_models_impl()."""
-
-    async def test_delegates_to_client(self, compat_provider) -> None:
-        compat_provider._client.models.list = AsyncMock(
-            return_value=SimpleNamespace(data=[_Model("gpt-4"), _Model("gpt-3.5")])
-        )
-        result = await compat_provider._list_models_impl()
-        assert len(result) == 2
-        assert result[0].id == "gpt-4"
-        assert result[1].id == "gpt-3.5"
-
-    async def test_filters_by_llm_type(self, compat_provider) -> None:
-        compat_provider._client.models.list = AsyncMock(
-            return_value=SimpleNamespace(
-                data=[_Model("gpt-4"), _Model("text-embedding-3")]
-            )
-        )
-        result = await compat_provider._list_models_impl(model_type=ModelType.LLM)
-        assert len(result) == 1
-        assert result[0].id == "gpt-4"
-
-    async def test_filters_by_other_type(self, compat_provider) -> None:
-        compat_provider._client.models.list = AsyncMock(
-            return_value=SimpleNamespace(
-                data=[_Model("gpt-4"), _Model("text-embedding-3")]
-            )
-        )
-        result = await compat_provider._list_models_impl(model_type=ModelType.OTHER)
-        assert len(result) == 1
-        assert result[0].id == "text-embedding-3"
-
-
-class TestGetModelImpl:
-    """Tests for OpenAICompatibleProvider._get_model_impl()."""
-
-    async def test_delegates_to_client(self, compat_provider) -> None:
-        compat_provider._client.models.retrieve = AsyncMock(
-            return_value=_Model("gpt-4")
-        )
-        result = await compat_provider._get_model_impl("gpt-4")
-        assert result.id == "gpt-4"
-        compat_provider._client.models.retrieve.assert_awaited_once_with("gpt-4")
-
-
-class TestFormatMessage:
-    """Tests for OpenAICompatibleProvider._format_message()."""
-
-    def test_user_message(self, compat_provider) -> None:
-        msg = UserMessage(content="hello")
-        result = compat_provider._format_message(msg)
-        assert result == {"role": "user", "content": "hello"}
-
-    def test_user_message_no_content_raises(self, compat_provider) -> None:
-        with pytest.raises(ValueError, match="cannot be None"):
-            compat_provider._format_message(UserMessage(content=None))
-
-    def test_system_message(self, compat_provider) -> None:
-        from yapa.models import SystemMessage
-
-        msg = SystemMessage(content="be helpful")
-        result = compat_provider._format_message(msg)
-        assert result == {"role": "system", "content": "be helpful"}
-
-    def test_assistant_message(self, compat_provider) -> None:
-        msg = AssistantMessage(content="hi there")
-        result = compat_provider._format_message(msg)
-        assert result == {"role": "assistant", "content": "hi there"}
-
-    def test_assistant_message_with_tool_calls(self, compat_provider) -> None:
-        tc = ToolCall(id="call_1", tool_name="get_weather", arguments={"loc": "SF"})
-        msg = AssistantMessage(content=None, tool_calls=[tc])
-        result = compat_provider._format_message(msg)
-        assert result == {
-            "role": "assistant",
-            "content": None,
-            "tool_calls": [
-                {
-                    "id": "call_1",
-                    "type": "function",
-                    "function": {
-                        "name": "get_weather",
-                        "arguments": json.dumps({"loc": "SF"}),
-                    },
-                }
-            ],
-        }
-
-    def test_tool_message(self, compat_provider) -> None:
-        msg = ToolMessage(content="sunny", tool_call_id="call_1", tool_name="weather")
-        result = compat_provider._format_message(msg)
-        assert result == {
-            "role": "tool",
-            "tool_call_id": "call_1",
-            "content": "sunny",
-        }
-
-    def test_unknown_role_raises(self, compat_provider) -> None:
-        msg = SimpleNamespace(role="unknown", content="foo")
-        with pytest.raises(ValueError, match="Unsupported message role"):
-            compat_provider._format_message(msg)
-
-
-class TestFormatTools:
-    """Tests for OpenAICompatibleProvider._format_tools()."""
-
-    def test_none(self, compat_provider) -> None:
-        assert compat_provider._format_tools(None) is None
-
-    def test_empty(self, compat_provider) -> None:
-        assert compat_provider._format_tools([]) is None
-
-    def test_formats_tools(self, compat_provider) -> None:
-
-        from yapa.tools.base import Tool
-
-        tool = MagicMock(spec=Tool)
-        tool.name = "get_weather"
-        tool.description = "Get weather"
-        tool.parameters = {"type": "object", "properties": {}}
-        result = compat_provider._format_tools([tool])
-        assert result == [
-            {
-                "type": "function",
-                "function": {
-                    "name": "get_weather",
-                    "description": "Get weather",
-                    "parameters": {"type": "object", "properties": {}},
-                },
-            }
-        ]
-
-
-class TestExtractReasoningContent:
-    """Tests for OpenAICompatibleProvider._extract_reasoning_content()."""
-
-    def test_reasoning_content(self, compat_provider) -> None:
-        obj = SimpleNamespace(reasoning_content="thinking...", reasoning=None)
-        assert compat_provider._extract_reasoning_content(obj) == "thinking..."
-
-    def test_reasoning_fallback(self, compat_provider) -> None:
-        obj = SimpleNamespace(reasoning="thinking...", reasoning_content=None)
-        assert compat_provider._extract_reasoning_content(obj) == "thinking..."
-
-    def test_both_prioritizes_reasoning(self, compat_provider) -> None:
-        obj = SimpleNamespace(reasoning="old", reasoning_content="new")
-        assert compat_provider._extract_reasoning_content(obj) == "old"
-
-    def test_empty_string_returns_none(self, compat_provider) -> None:
-        obj = SimpleNamespace(reasoning="", reasoning_content=None)
-        assert compat_provider._extract_reasoning_content(obj) is None
-
-    def test_all_none(self, compat_provider) -> None:
-        obj = SimpleNamespace(reasoning=None, reasoning_content=None)
-        assert compat_provider._extract_reasoning_content(obj) is None
-
-
-class TestCommonPreInvoke:
-    """Tests for OpenAICompatibleProvider._common_pre_invoke()."""
-
-    def test_builds_kwargs(self, compat_provider) -> None:
-        params = InferenceParams(temperature=0.7, max_tokens=100, top_p=0.9)
-        result = compat_provider._common_pre_invoke(
-            model_id="gpt-4",
-            messages=[UserMessage(content="hi")],
-            params=params,
-            stream=True,
-        )
-        assert result["model"] == "gpt-4"
-        assert result["temperature"] == 0.7
-        assert result["max_tokens"] == 100
-        assert result["top_p"] == 0.9
-        assert result["stream"] is True
-        assert result["messages"] == [{"role": "user", "content": "hi"}]
-
-    def test_default_params(self, compat_provider) -> None:
-        result = compat_provider._common_pre_invoke(
-            model_id="gpt-4",
-            messages=[UserMessage(content="hi")],
-            stream=False,
-        )
-        assert result["temperature"] is None
-        assert result["max_tokens"] is None
-        assert result["top_p"] is None
-        assert result["stream"] is False
-
-    def test_includes_tools(self, compat_provider) -> None:
-
-        from yapa.tools.base import Tool
-
-        tool = MagicMock(spec=Tool)
-        tool.name = "get_weather"
-        tool.description = "Get weather"
-        tool.parameters = {"type": "object", "properties": {}}
-        result = compat_provider._common_pre_invoke(
-            model_id="gpt-4",
-            messages=[UserMessage(content="hi")],
-            tools=[tool],
-            stream=True,
-        )
-        assert "tools" in result
-        assert len(result["tools"]) == 1
-
-    def test_omits_tools_when_none(self, compat_provider) -> None:
-        result = compat_provider._common_pre_invoke(
-            model_id="gpt-4",
-            messages=[UserMessage(content="hi")],
-            tools=None,
-            stream=True,
-        )
-        assert "tools" not in result
-
-
-class TestStreamChatImpl:
-    """Tests for OpenAICompatibleProvider._stream_chat_impl()."""
-
-    async def test_yields_content_chunks(self, compat_provider) -> None:
-        stream = _stream(
-            _chunk(content="Hello", reasoning_content=None),
-            _chunk(content=" world", reasoning_content=None),
-        )
-        mock_create = AsyncMock(return_value=stream)
-        compat_provider._client.chat.completions.create = mock_create
-
-        results: list[StreamDelta] = []
-        async for delta in compat_provider._stream_chat_impl(
-            model_id="gpt-4",
-            messages=[UserMessage(content="hi")],
-        ):
-            results.append(delta)
-
-        assert results[0].content == "Hello"
-        assert results[1].content == " world"
-
-    async def test_yields_reasoning_content(self, compat_provider) -> None:
-        stream = _stream(
-            _chunk(content=None, reasoning_content="thinking..."),
-        )
-        mock_create = AsyncMock(return_value=stream)
-        compat_provider._client.chat.completions.create = mock_create
-
-        results: list[StreamDelta] = []
-        async for delta in compat_provider._stream_chat_impl(
-            model_id="gpt-4",
-            messages=[UserMessage(content="hi")],
-        ):
-            results.append(delta)
-
-        assert results[0].reasoning_content == "thinking..."
-
-    async def test_yields_tool_call_deltas(self, compat_provider) -> None:
-        tc1 = _TC(index=0, id="call_1", name="get_weather", arguments='{"loc":"SF"}')
-        stream = _stream(
-            _chunk(content=None, reasoning_content=None, tool_calls=[tc1]),
-        )
-        mock_create = AsyncMock(return_value=stream)
-        compat_provider._client.chat.completions.create = mock_create
-
-        results: list[StreamDelta] = []
-        async for delta in compat_provider._stream_chat_impl(
-            model_id="gpt-4",
-            messages=[UserMessage(content="weather?")],
-        ):
-            results.append(delta)
-
-        assert len(results[0].tool_calls) == 1
-        assert results[0].tool_calls[0] == ToolCallDelta(
-            index=0, id="call_1", name="get_weather", arguments='{"loc":"SF"}'
-        )
-
-    async def test_passes_params_to_client(self, compat_provider) -> None:
-        stream = _stream(_chunk(content="ok", reasoning_content=None))
-        mock_create = AsyncMock(return_value=stream)
-        compat_provider._client.chat.completions.create = mock_create
-        params = InferenceParams(temperature=0.7, max_tokens=100, top_p=0.9)
-
-        async for _ in compat_provider._stream_chat_impl(
-            model_id="gpt-4",
-            messages=[UserMessage(content="hi")],
-            params=params,
-        ):
-            pass
-
-        mock_create.assert_awaited_once()
-        kwargs = mock_create.call_args.kwargs
-        assert kwargs["model"] == "gpt-4"
-        assert kwargs["temperature"] == 0.7
-        assert kwargs["max_tokens"] == 100
-        assert kwargs["top_p"] == 0.9
-        assert kwargs["stream"] is True
-        assert kwargs["stream_options"] == {"include_usage": True}
-
-    async def test_yields_finish_reason(self, compat_provider) -> None:
-        chunk = _chunk(content="done", reasoning_content=None, finish_reason="stop")
-        stream = _stream(chunk)
-        mock_create = AsyncMock(return_value=stream)
-        compat_provider._client.chat.completions.create = mock_create
-
-        results: list[StreamDelta] = []
-        async for delta in compat_provider._stream_chat_impl(
-            model_id="gpt-4",
-            messages=[UserMessage(content="hi")],
-        ):
-            results.append(delta)
-
-        assert results[0].finish_reason == "stop"
-
-    async def test_yields_usage(self, compat_provider) -> None:
-        usage = SimpleNamespace(prompt_tokens=10, completion_tokens=20, total_tokens=30)
-        chunk = _chunk(content="done", reasoning_content=None, usage=usage)
-        stream = _stream(chunk)
-        mock_create = AsyncMock(return_value=stream)
-        compat_provider._client.chat.completions.create = mock_create
-
-        results: list[StreamDelta] = []
-        async for delta in compat_provider._stream_chat_impl(
-            model_id="gpt-4",
-            messages=[UserMessage(content="hi")],
-        ):
-            results.append(delta)
-
-        assert results[0].usage is not None
-        assert results[0].usage.prompt_tokens == 10
-        assert results[0].usage.total_tokens == 30
-
-    async def test_no_metadata_when_not_in_response(self, compat_provider) -> None:
-        stream = _stream(_chunk(content="ok", reasoning_content=None))
-        mock_create = AsyncMock(return_value=stream)
-        compat_provider._client.chat.completions.create = mock_create
-
-        results: list[StreamDelta] = []
-        async for delta in compat_provider._stream_chat_impl(
-            model_id="gpt-4",
-            messages=[UserMessage(content="hi")],
-        ):
-            results.append(delta)
-
-        assert results[0].usage is None
-        assert results[0].finish_reason is None
-
-
-class TestOpenAIModelMetadata:
-    """Tests for OpenAIIP._format_model() metadata lookup."""
-
-    @pytest.fixture
-    def openai_provider(self, mock_openai_client):
-        from yapa.services.config import Config, ProviderConfig
-
-        with patch(
-            "yapa.providers.openai_compat.AsyncOpenAI",
-            return_value=mock_openai_client,
-        ):
-            provider = OpenAIIP(
-                config=Config(
-                    provider_configs={"openai": ProviderConfig(api_key="sk-test")}
-                )
-            )
-        provider._client = mock_openai_client
-        return provider
-
-    def test_known_model_gets_metadata(self, openai_provider):
-        model = openai_provider._format_model("gpt-5.6-sol")
-        assert model.context_length == 1_050_000
-        assert model.max_output == 131072
-        assert model.supports_tools is True
-        assert model.supports_vision is True
-
-    def test_unknown_model_defaults(self, openai_provider):
-        model = openai_provider._format_model("unknown-model")
-        assert model.context_length is None
-        assert model.max_output is None
-        assert model.supports_tools is False
-        assert model.supports_vision is False
-
-    def test_embed_model_gets_other_type(self, openai_provider):
-        model = openai_provider._format_model("text-embedding-3")
-        assert model.type == ModelType.OTHER
-        assert model.supports_tools is False
-        assert model.supports_vision is False
-
-    def test_all_known_models_have_metadata(self, openai_provider):
-        from yapa.providers.openai.provider import _MODEL_METADATA
-
-        for model_id in _MODEL_METADATA:
-            model = openai_provider._format_model(model_id)
-            assert model.context_length is not None
-            assert model.max_output is not None
-
-
-class TestStaticChatImpl:
-    """Tests for OpenAICompatibleProvider._static_chat_impl()."""
-
-    def _make_response(
-        self, content="Hello", reasoning_content=None, tool_calls=None, usage=None
+        kwargs = mk.call_args.kwargs
+        assert kwargs["timeout"] == 120
+        assert kwargs["max_retries"] == 2
+        assert kwargs["api_key"] == "sk-1"
+
+
+def test_no_auth_client_when_key_empty() -> None:
+    with (
+        patch("yapa.providers.openai._noauth.AsyncOpenAI") as mk,
+        patch("yapa.providers.openai._noauth.httpx"),
     ):
-        message = SimpleNamespace(
-            content=content,
-            reasoning_content=reasoning_content,
-            tool_calls=tool_calls,
+        _make(
+            identifier="x",
+            name="X",
+            api_key=None,
+            base_url="https://example.com/v1",
+            timeout=30,
+            max_retries=0,
         )
-        choice = SimpleNamespace(message=message)
-        return SimpleNamespace(choices=[choice], usage=usage)
+        kwargs = mk.call_args.kwargs
+        # sentinel key passed; an httpx client is supplied to strip Authorization
+        assert kwargs["api_key"] == "no-key-provider"
+        assert "http_client" in kwargs
 
-    async def test_returns_assistant_message(self, compat_provider) -> None:
-        response = self._make_response(content="Hello world")
-        mock_create = AsyncMock(return_value=response)
-        compat_provider._client.chat.completions.create = mock_create
 
-        result = await compat_provider._static_chat_impl(
-            model_id="gpt-4",
-            messages=[UserMessage(content="hi")],
-        )
+# ── _format_model classification ──
 
-        assert isinstance(result, AssistantMessage)
-        assert result.content == "Hello world"
-        assert result.role == "assistant"
 
-    async def test_returns_reasoning_content(self, compat_provider) -> None:
-        response = self._make_response(
-            content="answer", reasoning_content="thinking..."
-        )
-        mock_create = AsyncMock(return_value=response)
-        compat_provider._client.chat.completions.create = mock_create
+class _Format(_Concrete):
+    def __init__(self):
+        super().__init__("x", "X", api_key="k", base_url="http://x/v1")
 
-        result = await compat_provider._static_chat_impl(
-            model_id="gpt-4",
-            messages=[UserMessage(content="hi")],
-        )
 
-        assert result.reasoning_content == "thinking..."
+def test_native_llm_overrides_embed_keyword() -> None:
+    p = _Format()
+    m = p._format_model("text-embedding-3-large", native_type="llm")
+    assert type(m) is LanguageModel
+    assert m.type == "llm"
 
-    async def test_returns_tool_calls(self, compat_provider) -> None:
-        tc1 = SimpleNamespace(
-            id="call_1",
-            function=SimpleNamespace(
-                name="get_weather",
-                arguments='{"loc":"SF"}',
-            ),
-        )
-        response = self._make_response(content=None, tool_calls=[tc1])
-        mock_create = AsyncMock(return_value=response)
-        compat_provider._client.chat.completions.create = mock_create
 
-        result = await compat_provider._static_chat_impl(
-            model_id="gpt-4",
-            messages=[UserMessage(content="weather?")],
-        )
+def test_embed_keyword_without_native_type_is_embed() -> None:
+    p = _Format()
+    m = p._format_model("text-embedding-3-large")
+    assert type(m) is EmbedModel
+    assert m.type == "embedding"
 
-        assert result.tool_calls == [
-            ToolCall(id="call_1", tool_name="get_weather", arguments={"loc": "SF"})
+
+def test_audio_image_keywords_are_other() -> None:
+    p = _Format()
+    assert p._format_model("my-audio-model").type == ModelType.OTHER
+    assert p._format_model("my-image-model").type == ModelType.OTHER
+
+
+def test_no_keyword_is_llm() -> None:
+    p = _Format()
+    m = p._format_model("gpt-4o")
+    assert type(m) is LanguageModel
+
+
+def test_native_embedding_type_is_embed() -> None:
+    p = _Format()
+    m = p._format_model("embed", native_type="embedding")
+    assert type(m) is EmbedModel
+
+
+def test_classified_model_is_never_bare_model_data() -> None:
+    p = _Format()
+    for mid, nt in (("gpt-4", None), ("embed", None), ("dall-e", None)):
+        m = p._format_model(mid, native_type=nt)
+        assert type(m) is not ModelData
+
+
+# ── _format_message ──
+
+
+class _Fmt(_Concrete):
+    def __init__(self):
+        super().__init__("x", "X", api_key="k", base_url="http://x/v1")
+
+
+def test_image_parts_become_content_array() -> None:
+    p = _Fmt()
+    msg = UserMessage(
+        content=[
+            TextPart(type="text", text="what is this?"),
+            ImagePart(type="image_url", image_url={"url": "data:image/png;base64,AA"}),
         ]
-        assert result.content is None
+    )
+    out = p._format_message(msg)
+    assert out["role"] == "user"
+    assert out["content"] == [
+        {"type": "text", "text": "what is this?"},
+        {"type": "image_url", "image_url": {"url": "data:image/png;base64,AA"}},
+    ]
 
-    async def test_passes_params_to_client(self, compat_provider) -> None:
-        response = self._make_response(content="ok")
-        mock_create = AsyncMock(return_value=response)
-        compat_provider._client.chat.completions.create = mock_create
-        params = InferenceParams(temperature=0.7, max_tokens=100, top_p=0.9)
 
-        await compat_provider._static_chat_impl(
-            model_id="gpt-4",
-            messages=[UserMessage(content="hi")],
-            params=params,
-        )
+def test_plain_string_message_unchanged() -> None:
+    p = _Fmt()
+    out = p._format_message(UserMessage(content="hello"))
+    assert out["content"] == "hello"
 
-        mock_create.assert_awaited_once()
-        kwargs = mock_create.call_args.kwargs
-        assert kwargs["temperature"] == 0.7
-        assert kwargs["max_tokens"] == 100
-        assert kwargs["top_p"] == 0.9
-        assert kwargs["stream"] is False
 
-    async def test_handles_none_content(self, compat_provider) -> None:
-        response = self._make_response(content=None)
-        mock_create = AsyncMock(return_value=response)
-        compat_provider._client.chat.completions.create = mock_create
+def test_assistant_reasoning_content_included() -> None:
+    p = _Fmt()
+    out = p._format_message(
+        AssistantMessage(content="answer", reasoning_content="think")
+    )
+    assert out.get("reasoning_content") == "think"
 
-        result = await compat_provider._static_chat_impl(
-            model_id="gpt-4",
-            messages=[UserMessage(content="hi")],
-        )
 
-        assert result.content is None
+def test_assistant_without_reasoning_unchanged() -> None:
+    p = _Fmt()
+    out = p._format_message(AssistantMessage(content="answer"))
+    assert out.get("reasoning_content") is None
 
-    async def test_returns_usage(self, compat_provider) -> None:
-        usage = SimpleNamespace(prompt_tokens=10, completion_tokens=20, total_tokens=30)
-        response = self._make_response(content="Hello", usage=usage)
-        mock_create = AsyncMock(return_value=response)
-        compat_provider._client.chat.completions.create = mock_create
 
-        result = await compat_provider._static_chat_impl(
-            model_id="gpt-4",
-            messages=[UserMessage(content="hi")],
-        )
+# ── _extract_reasoning precedence ──
 
-        assert result.usage is not None
-        assert result.usage.total_tokens == 30
 
-    async def test_no_usage_when_not_in_response(self, compat_provider) -> None:
-        response = self._make_response(content="Hello")
-        mock_create = AsyncMock(return_value=response)
-        compat_provider._client.chat.completions.create = mock_create
+class _RM(_Concrete):
+    def __init__(self):
+        super().__init__("x", "X", api_key="k", base_url="http://x/v1")
 
-        result = await compat_provider._static_chat_impl(
-            model_id="gpt-4",
-            messages=[UserMessage(content="hi")],
-        )
 
-        assert result.usage is None
+def test_reasoning_content_extracted() -> None:
+    p = _RM()
+    assert p._extract_reasoning(SimpleNamespace(reasoning_content="think")) == "think"
+
+
+def test_reasoning_attribute_never_used_as_fallback() -> None:
+    p = _RM()
+    obj = SimpleNamespace(reasoning="should NOT win", reasoning_content="winner")
+    assert p._extract_reasoning(obj) == "winner"
+
+
+def test_reasoning_fallback_to_reasoning_field() -> None:
+    """When reasoning_content is absent, fall back to reasoning (e.g. OpenRouter)."""
+    p = _RM()
+    obj = SimpleNamespace(reasoning="fallback only")
+    assert p._extract_reasoning(obj) == "fallback only"
+    obj2 = SimpleNamespace(reasoning="r", reasoning_content=None)
+    assert p._extract_reasoning(obj2) == "r"
+    obj3 = SimpleNamespace(reasoning=None, reasoning_content="   ")
+    assert p._extract_reasoning(obj3) is None
+
+
+def test_empty_whitespace_reasoning_is_none() -> None:
+    p = _RM()
+    assert p._extract_reasoning(SimpleNamespace(reasoning_content="   ")) is None
+
+
+# ── _build_request_kwargs ──
+
+
+class _RB(_Concrete):
+    def __init__(self):
+        super().__init__("x", "X", api_key="k", base_url="http://x/v1")
+
+
+def test_unset_params_omitted_from_request() -> None:
+    p = _RB()
+    kw = p._build_request_kwargs(
+        "gpt", [], None, InferenceParams(), stream=False, reasoning=None
+    )
+    assert "temperature" not in kw
+    assert "max_tokens" not in kw
+    assert "top_p" not in kw
+
+
+def test_set_params_sent() -> None:
+    p = _RB()
+    kw = p._build_request_kwargs(
+        "gpt",
+        [],
+        None,
+        InferenceParams(temperature=0.7, max_tokens=100),
+        stream=False,
+        reasoning=None,
+    )
+    assert kw["temperature"] == 0.7
+    assert kw["max_tokens"] == 100
+    assert "top_p" not in kw
+
+
+def test_stream_usage_option_when_supported() -> None:
+    p = _RB()
+    kw = p._build_request_kwargs(
+        "gpt", [], None, InferenceParams(), stream=True, reasoning=None
+    )
+    assert kw.get("stream_options") == {"include_usage": True}
+
+
+def test_stream_usage_option_omitted_when_unsupported() -> None:
+    class _NoUsage(_RB):
+        _SUPPORTS_STREAM_USAGE = False
+
+    p = _NoUsage()
+    kw = p._build_request_kwargs(
+        "gpt", [], None, InferenceParams(), stream=True, reasoning=None
+    )
+    assert "stream_options" not in kw
+
+
+def test_reasoning_mapping() -> None:
+    p = _RB()
+    kw = p._build_request_kwargs(
+        "gpt", [], None, InferenceParams(), stream=False, reasoning=ReasoningEffort.HIGH
+    )
+    assert kw["reasoning"] == {"effort": "high"}
+    kw_low = p._build_request_kwargs(
+        "gpt", [], None, InferenceParams(), stream=False, reasoning=ReasoningEffort.LOW
+    )
+    assert kw_low["reasoning"] == {"effort": "low"}
+    kw_off = p._build_request_kwargs(
+        "gpt", [], None, InferenceParams(), stream=False, reasoning=ReasoningEffort.OFF
+    )
+    assert "reasoning" not in kw_off
+    kw_none = p._build_request_kwargs(
+        "gpt", [], None, InferenceParams(), stream=False, reasoning=None
+    )
+    assert "reasoning" not in kw_none

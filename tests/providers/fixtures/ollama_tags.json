@@ -1,0 +1,18 @@
+{
+  "models": [
+    {
+      "name": "qwen3.5:0.8b",
+      "model": "qwen3.5:0.8b",
+      "modified_at": "2026-08-05T13:51:33.959811-04:00",
+      "size": 1036046583,
+      "details": {
+        "parent_model": "",
+        "format": "gguf",
+        "family": "qwen35",
+        "parameter_size": "873.44M",
+        "quantization_level": "Q8_0"
+      },
+      "capabilities": ["vision", "completion", "tools", "thinking"]
+    }
+  ]
+}

@@ -4,7 +4,7 @@ from uuid import uuid4
 
 import pytest
 
-from yapa.models import ModelData, ModelType, Session
+from yapa.models import LanguageModel, Session
 from yapa.models.event import (
     AgentDoneEvent,
     AgentErrorEvent,
@@ -20,7 +20,7 @@ from yapa.models.tool import ToolApprovalRequest
 def test_chat_ws_streams_events(client, mock_chat_service, mock_session_service):
     session_id = str(uuid4())
     mock_session_service.get.return_value = Session(
-        model=ModelData(id="gpt-4o", provider_id="openai", type=ModelType.LLM)
+        model=LanguageModel(id="gpt-4o", provider_id="openai")
     )
 
     async def _stream(*, session_id, prompt, model, **kwargs):
@@ -54,10 +54,9 @@ def test_chat_ws_uses_requested_model(
 ):
     session_id = str(uuid4())
     mock_session_service.get.return_value = Session()
-    requested_model = ModelData(
+    requested_model = LanguageModel(
         id="gpt-4o",
         provider_id="openai",
-        type=ModelType.LLM,
     )
     mock_model_service.get_model.return_value = requested_model
 
@@ -96,7 +95,7 @@ def test_chat_ws_closes_when_no_model_can_be_resolved(
 def test_chat_ws_multiple_prompts(client, mock_chat_service, mock_session_service):
     session_id = str(uuid4())
     mock_session_service.get.return_value = Session(
-        model=ModelData(id="gpt-4o", provider_id="openai", type=ModelType.LLM)
+        model=LanguageModel(id="gpt-4o", provider_id="openai")
     )
 
     calls = 0
@@ -125,7 +124,7 @@ def test_chat_ws_multiple_prompts(client, mock_chat_service, mock_session_servic
 def test_chat_ws_error_event(client, mock_chat_service, mock_session_service):
     session_id = str(uuid4())
     mock_session_service.get.return_value = Session(
-        model=ModelData(id="gpt-4o", provider_id="openai", type=ModelType.LLM)
+        model=LanguageModel(id="gpt-4o", provider_id="openai")
     )
 
     async def _stream(*, session_id, prompt, model, **kwargs):
@@ -145,7 +144,7 @@ def test_chat_ws_error_event(client, mock_chat_service, mock_session_service):
 def test_chat_ws_missing_prompt(client, mock_session_service):
     session_id = str(uuid4())
     mock_session_service.get.return_value = Session(
-        model=ModelData(id="gpt-4o", provider_id="openai", type=ModelType.LLM)
+        model=LanguageModel(id="gpt-4o", provider_id="openai")
     )
 
     with client.websocket_connect(f"/api/v1/chat/{session_id}") as ws:
@@ -157,7 +156,7 @@ def test_chat_ws_missing_prompt(client, mock_session_service):
 def test_chat_ws_invalid_json(client, mock_session_service):
     session_id = str(uuid4())
     mock_session_service.get.return_value = Session(
-        model=ModelData(id="gpt-4o", provider_id="openai", type=ModelType.LLM)
+        model=LanguageModel(id="gpt-4o", provider_id="openai")
     )
 
     with client.websocket_connect(f"/api/v1/chat/{session_id}") as ws:
@@ -170,10 +169,10 @@ def test_chat_ws_tool_approval_flow(client, mock_chat_service, mock_session_serv
     """WebSocket sends ToolApprovalRequestEvent and client responds with approval."""
     session_id = str(uuid4())
     mock_session_service.get.return_value = Session(
-        model=ModelData(id="gpt-4o", provider_id="openai", type=ModelType.LLM)
+        model=LanguageModel(id="gpt-4o", provider_id="openai")
     )
 
-    async def _stream(*, session_id, prompt, model, get_approval=None):
+    async def _stream(*, session_id, prompt, model, reasoning=None, get_approval=None):
         yield AgentStartEvent(model_id="openai:gpt-4o")
         yield ToolCallEvent(
             tool_name="write_file",
@@ -223,10 +222,10 @@ def test_chat_ws_tool_denial_flow(client, mock_chat_service, mock_session_servic
     """Client can deny a tool call."""
     session_id = str(uuid4())
     mock_session_service.get.return_value = Session(
-        model=ModelData(id="gpt-4o", provider_id="openai", type=ModelType.LLM)
+        model=LanguageModel(id="gpt-4o", provider_id="openai")
     )
 
-    async def _stream(*, session_id, prompt, model, get_approval=None):
+    async def _stream(*, session_id, prompt, model, reasoning=None, get_approval=None):
         yield AgentStartEvent(model_id="openai:gpt-4o")
         yield ToolCallEvent(tool_name="write_file", arguments={}, call_id="call_1")
         yield ToolApprovalRequestEvent(

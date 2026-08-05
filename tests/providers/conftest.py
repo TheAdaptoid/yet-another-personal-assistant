@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import Generator
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -9,6 +11,13 @@ import pytest
 from yapa.models import ModelData, ModelType
 from yapa.models.message import UserMessage
 from yapa.services.config import Config, ProviderConfig
+
+FIXTURES_DIR = Path(__file__).parent / "fixtures"
+
+
+def load_fixture(name: str) -> dict | list:
+    """Load a recorded-response fixture by filename."""
+    return json.loads((FIXTURES_DIR / name).read_text(encoding="utf-8"))
 
 
 @pytest.fixture(autouse=True)

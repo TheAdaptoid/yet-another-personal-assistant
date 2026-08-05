@@ -4,8 +4,15 @@ from unittest.mock import patch
 
 import pytest
 
-from yapa.models import AssistantMessage, ModelData, ModelType, StreamDelta
+from yapa.models import (
+    AssistantMessage,
+    EmbeddingResult,
+    ModelData,
+    ModelDataUnion,
+    ModelType,
+)
 from yapa.providers.base import InferenceProvider
+from yapa.providers.openai.provider import OpenAIIP
 from yapa.providers.registry import ProviderNotAvailableError, ProviderRegistry
 
 
@@ -15,17 +22,25 @@ class _MockProv(InferenceProvider):
     def __init__(self, config=None):
         super().__init__("mock", "Mock Provider")
 
-    async def _list_models_impl(self, model_type=None):
+    async def _list_models_impl(self, model_type=None) -> list[ModelDataUnion]:
         return []
 
-    async def _get_model_impl(self, model_id):
+    async def _get_model_impl(self, model_id) -> ModelDataUnion:
         return ModelData(id=model_id, provider_id=self.id, type=ModelType.LLM)
 
-    async def _stream_chat_impl(self, model_id, messages, tools=None, params=None):
-        yield StreamDelta(content="test")
+    async def _stream_chat_impl(
+        self, model_id, messages, tools=None, params=None, reasoning=None
+    ):
+        if False:
+            yield
 
-    async def _static_chat_impl(self, model_id, messages, tools=None, params=None):
+    async def _static_chat_impl(
+        self, model_id, messages, tools=None, params=None, reasoning=None
+    ):
         return AssistantMessage(content="test", role="assistant")
+
+    async def _embed_impl(self, model_id, input):
+        return EmbeddingResult(vectors=[[1.0]], model_id=model_id)
 
 
 class _MockProvB(InferenceProvider):
@@ -34,21 +49,29 @@ class _MockProvB(InferenceProvider):
     def __init__(self, config=None):
         super().__init__("prov_b", "Provider B")
 
-    async def _list_models_impl(self, model_type=None):
+    async def _list_models_impl(self, model_type=None) -> list[ModelDataUnion]:
         return []
 
-    async def _get_model_impl(self, model_id):
+    async def _get_model_impl(self, model_id) -> ModelDataUnion:
         return ModelData(id=model_id, provider_id=self.id, type=ModelType.LLM)
 
-    async def _stream_chat_impl(self, model_id, messages, tools=None, params=None):
-        yield StreamDelta(content="test")
+    async def _stream_chat_impl(
+        self, model_id, messages, tools=None, params=None, reasoning=None
+    ):
+        if False:
+            yield
 
-    async def _static_chat_impl(self, model_id, messages, tools=None, params=None):
+    async def _static_chat_impl(
+        self, model_id, messages, tools=None, params=None, reasoning=None
+    ):
         return AssistantMessage(content="test", role="assistant")
+
+    async def _embed_impl(self, model_id, input):
+        return EmbeddingResult(vectors=[[1.0]], model_id=model_id)
 
 
 class _FailingProv(InferenceProvider):
-    """Provider that fails to initialize."""
+    """Provider that fails to initialize before an id exists."""
 
     def __init__(self, config=None):
         raise ValueError("Missing API key")
@@ -59,11 +82,75 @@ class _FailingProv(InferenceProvider):
     async def _get_model_impl(self, model_id):
         raise RuntimeError("should not be called")
 
-    async def _stream_chat_impl(self, model_id, messages, tools=None, params=None):
+    async def _stream_chat_impl(
+        self, model_id, messages, tools=None, params=None, reasoning=None
+    ):
         raise RuntimeError("should not be called")
         yield  # pragma: no cover
 
-    async def _static_chat_impl(self, model_id, messages, tools=None, params=None):
+    async def _static_chat_impl(
+        self, model_id, messages, tools=None, params=None, reasoning=None
+    ):
+        raise RuntimeError("should not be called")
+
+    async def _embed_impl(self, model_id, input):
+        raise RuntimeError("should not be called")
+
+
+class _LateFailProv(InferenceProvider):
+    """Fails after super().__init__, so an id exists."""
+
+    PROVIDER_ID = "latefail"
+
+    def __init__(self, config=None):
+        super().__init__("latefail", "Late Fail")
+        raise ValueError("boom after id")
+
+    async def _list_models_impl(self, model_type=None):
+        raise RuntimeError("should not be called")
+
+    async def _get_model_impl(self, model_id):
+        raise RuntimeError("should not be called")
+
+    async def _stream_chat_impl(
+        self, model_id, messages, tools=None, params=None, reasoning=None
+    ):
+        if False:
+            yield
+
+    async def _static_chat_impl(
+        self, model_id, messages, tools=None, params=None, reasoning=None
+    ):
+        raise RuntimeError("should not be called")
+
+    async def _embed_impl(self, model_id, input):
+        raise RuntimeError("should not be called")
+
+
+class _RuntimeFailingProv(InferenceProvider):
+    """Provider that fails to initialize with a non-ValueError."""
+
+    def __init__(self, config=None):
+        raise RuntimeError("boom")
+
+    async def _list_models_impl(self, model_type=None):
+        raise RuntimeError("should not be called")
+
+    async def _get_model_impl(self, model_id):
+        raise RuntimeError("should not be called")
+
+    async def _stream_chat_impl(
+        self, model_id, messages, tools=None, params=None, reasoning=None
+    ):
+        raise RuntimeError("should not be called")
+        yield  # pragma: no cover
+
+    async def _static_chat_impl(
+        self, model_id, messages, tools=None, params=None, reasoning=None
+    ):
+        raise RuntimeError("should not be called")
+
+    async def _embed_impl(self, model_id, input):
         raise RuntimeError("should not be called")
 
 
@@ -92,34 +179,6 @@ class TestInit:
         assert "Missing API key" in registry.failures["_FailingProv"]
 
     def test_captures_non_value_error_init_failures(self) -> None:
-        class _RuntimeFailingProv(InferenceProvider):
-            def __init__(self, config=None):
-                raise RuntimeError("boom")
-
-            async def _list_models_impl(self, model_type=None):
-                raise RuntimeError("should not be called")
-
-            async def _get_model_impl(self, model_id):
-                raise RuntimeError("should not be called")
-
-            async def _stream_chat_impl(
-                self,
-                model_id,
-                messages,
-                tools=None,
-                params=None,
-            ):
-                raise RuntimeError("should not be called")
-
-            async def _static_chat_impl(
-                self,
-                model_id,
-                messages,
-                tools=None,
-                params=None,
-            ):
-                raise RuntimeError("should not be called")
-
         registry = ProviderRegistry([_RuntimeFailingProv])
         assert len(registry.available) == 0
         assert registry.failures["_RuntimeFailingProv"] == "boom"
@@ -198,15 +257,69 @@ class TestGet:
 
     def test_raises_for_unknown(self) -> None:
         registry = ProviderRegistry([])
-        with pytest.raises(ProviderNotAvailableError, match="not found"):
+        with pytest.raises(ProviderNotAvailableError, match="unknown"):
             registry.get("unknown")
 
     def test_raises_for_unregistered_id(self) -> None:
         registry = ProviderRegistry([_MockProv])
-        with pytest.raises(ProviderNotAvailableError, match="not found"):
+        with pytest.raises(ProviderNotAvailableError, match="unknown"):
             registry.get("nonexistent")
 
     def test_raises_when_provider_failed_to_init(self) -> None:
         registry = ProviderRegistry([_FailingProv])
         with pytest.raises(ProviderNotAvailableError):
             registry.get("unknown")
+
+
+class TestFailureKeying:
+    """Failures keyed by id when determinable, else class name."""
+
+    def test_failure_before_id_keyed_by_class_name(self) -> None:
+        registry = ProviderRegistry([_FailingProv])
+        assert registry.failures == {"_FailingProv": "Missing API key"}
+
+    def test_failure_after_id_keyed_by_provider_id(self) -> None:
+        registry = ProviderRegistry([_LateFailProv])
+        assert "latefail" in registry.failures
+        assert "boom after id" in registry.failures["latefail"]
+
+    def test_real_provider_failure_keyed_by_provider_id(self) -> None:
+        class _FailingOpenAI(OpenAIIP):
+            def __init__(self, config=None):
+                raise ValueError("openai boom")
+
+        registry = ProviderRegistry([_FailingOpenAI])
+        assert registry.failures["openai"] == "openai boom"
+        with pytest.raises(ProviderNotAvailableError, match="openai boom"):
+            registry.get("openai")
+
+
+class TestFailureLogging:
+    """Init failures are logged at error level."""
+
+    def test_logs_failure_at_error(self) -> None:
+        with patch("yapa.providers.registry.logger") as mock_logger:
+            ProviderRegistry([_FailingProv])
+            mock_logger.error.assert_called()
+            msg = str(mock_logger.error.call_args)
+            assert "Missing API key" in msg
+
+    def test_no_error_log_when_success(self) -> None:
+        with patch("yapa.providers.registry.logger") as mock_logger:
+            ProviderRegistry([_MockProv])
+            for call in mock_logger.error.call_args_list:
+                raise AssertionError(f"unexpected error log: {call}")
+
+
+class TestGetIncludeFailureReason:
+    """get() includes the stored failure reason for failed providers."""
+
+    def test_get_raises_with_failure_reason(self) -> None:
+        registry = ProviderRegistry([_LateFailProv])
+        with pytest.raises(ProviderNotAvailableError, match="boom after id"):
+            registry.get("latefail")
+
+    def test_get_raises_unknown_for_unregistered(self) -> None:
+        registry = ProviderRegistry([_MockProv])
+        with pytest.raises(ProviderNotAvailableError, match="unknown"):
+            registry.get("nope")

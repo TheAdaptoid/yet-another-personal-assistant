@@ -1,6 +1,7 @@
 """Tests for Message discriminated union resolution."""
 
-from pydantic import TypeAdapter
+import pytest
+from pydantic import TypeAdapter, ValidationError
 
 from yapa.models import (
     AssistantMessage,
@@ -9,6 +10,7 @@ from yapa.models import (
     TokenUsage,
     UserMessage,
 )
+from yapa.models.message import ImagePart, TextPart
 
 _adapter = TypeAdapter(Message)
 
@@ -46,3 +48,27 @@ class TestDiscriminator:
         assert isinstance(restored, AssistantMessage)
         assert restored.usage is not None
         assert restored.usage.total_tokens == 30
+
+
+def test_plain_string_message_parses() -> None:
+    m = UserMessage(content="hello")
+    assert m.content == "hello"
+
+
+def test_mixed_content_parts_parse_and_round_trip() -> None:
+    m = UserMessage(
+        content=[
+            TextPart(type="text", text="What is this?"),
+            ImagePart(type="image_url", image_url={"url": "data:image/png;base64,AA"}),
+        ]
+    )
+    assert isinstance(m.content, list)
+    assert m.content[0].text == "What is this?"
+    assert m.content[1].image_url.url == "data:image/png;base64,AA"
+    dumped = m.model_dump()
+    assert dumped["content"][1]["type"] == "image_url"
+
+
+def test_unknown_part_type_fails_validation() -> None:
+    with pytest.raises(ValidationError):
+        UserMessage(content=[{"type": "video", "url": "x"}])
