@@ -121,6 +121,11 @@ class OllamaIP(InferenceProvider):
                 d["content"] = m.content
                 if getattr(m, "reasoning_content", None):
                     d["thinking"] = m.reasoning_content
+                if getattr(m, "tool_calls", None):
+                    d["tool_calls"] = [
+                        {"function": {"name": tc.tool_name, "arguments": tc.arguments}}
+                        for tc in m.tool_calls
+                    ]
             elif m.role == "system":
                 d["content"] = m.content or ""
             elif m.role == "tool":

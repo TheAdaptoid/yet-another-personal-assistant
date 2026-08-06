@@ -49,6 +49,22 @@ def ollama_client():
     return provider, client, mk
 
 
+def test_new_messages_serializes_assistant_tool_calls(ollama_client) -> None:
+    from yapa.models import AssistantMessage, ToolCall
+
+    provider, _, _ = ollama_client
+    msg = AssistantMessage(
+        content=None,
+        tool_calls=[
+            ToolCall(id="t1", tool_name="read_file", arguments={"path": "/x"})
+        ],
+    )
+    out = provider._new_messages([msg])
+    assert out[0]["tool_calls"] == [
+        {"function": {"name": "read_file", "arguments": {"path": "/x"}}}
+    ]
+
+
 class TestReasoningMapping:
     def test_mapping(self) -> None:
         with patch(_ASYNC_CLIENT):
@@ -97,6 +113,35 @@ class TestStreaming:
             ev async for ev in provider._stream_chat_impl("llama", [], None, None, None)
         ]
         assert not any(isinstance(e, ReasoningDelta) for e in evs)
+
+    async def test_stream_emits_tool_call_delta(self, ollama_client) -> None:
+        provider, client, _ = ollama_client
+        chunks = [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "function": {
+                                "name": "read_file",
+                                "arguments": {"path": "/x"},
+                            }
+                        }
+                    ],
+                },
+                "done": False,
+            },
+            {"message": {"role": "assistant"}, "done": True},
+        ]
+        client.chat.return_value = _stream(*chunks)
+        evs = [
+            ev async for ev in provider._stream_chat_impl("llama", [], None, None, None)
+        ]
+        from yapa.models import ToolCallDeltaEvent
+
+        tcs = [e for e in evs if isinstance(e, ToolCallDeltaEvent)]
+        assert tcs and tcs[0].name == "read_file"
 
 
 class TestRetry:
