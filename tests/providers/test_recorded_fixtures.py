@@ -44,8 +44,8 @@ def test_openrouter_models_parsing() -> None:
     raw = load_fixture("openrouter_models.json")
     formatted = [p._format_model_from_openrouter(m) for m in raw["data"]]
     assert type(formatted[0]) is LanguageModel
-    assert formatted[0].pricing.input == 2.0  # 0.000002 * 1_000_000
-    assert formatted[0].pricing.output == 6.0
+    assert formatted[0].pricing.input == 0.002  # 0.000002 * 1000 (per-1M)
+    assert formatted[0].pricing.output == 0.006
     assert formatted[0].supports_tools is True
     assert type(formatted[1]) is EmbedModel
 

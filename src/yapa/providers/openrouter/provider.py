@@ -66,21 +66,28 @@ class OpenRouterProvider(OpenAICompatibleProvider):
         return "llm"
 
     def _normalize_pricing(self, p: dict | None) -> ModelPricing | None:
+        """Normalize OpenRouter pricing (native USD per-1K tokens) to per-1M."""
         if not p:
             return None
         try:
             return ModelPricing(
                 input=(
-                    float(p["prompt"]) * 1_000_000
+                    float(p["prompt"]) * 1000
                     if p.get("prompt") is not None
-                    else None
+                    else (
+                        float(p["input"]) * 1000 if p.get("input") is not None else None
+                    )
                 ),
                 output=(
-                    float(p["completion"]) * 1_000_000
+                    float(p["completion"]) * 1000
                     if p.get("completion") is not None
-                    else None
+                    else (
+                        float(p["output"]) * 1000
+                        if p.get("output") is not None
+                        else None
+                    )
                 ),
-                request=float(p["request"]) if p.get("request") is not None else None,
+                request=(float(p["request"]) if p.get("request") is not None else None),
             )
         except (ValueError, TypeError):
             return None

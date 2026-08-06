@@ -84,11 +84,38 @@ class TestListing:
         assert type(by_id["openai/gpt-4"]) is LanguageModel
         assert type(by_id["openai/text-embedding-3"]) is EmbedModel
         gpt = by_id["openai/gpt-4"]
-        assert gpt.pricing.input == 1.0  # 0.000001 * 1_000_000
-        assert gpt.pricing.output == 2.0
+        assert gpt.pricing.input == 0.001  # 0.000001 * 1000 (per-1M)
+        assert gpt.pricing.output == 0.002
         assert gpt.pricing.request == 0.0
         # image/web_search dropped
         assert gpt.pricing.model_fields_set == {"input", "output", "request"}
+
+    async def test_pricing_accepts_input_output_keys(self) -> None:
+        raw = [
+            _raw_model(
+                "openai/x",
+                pricing={
+                    "input": 0.001,
+                    "output": 0.002,
+                    "request": 0.0,
+                    "image": 0.0,
+                },
+            )
+        ]
+        resp = MagicMock()
+        resp.raise_for_status = MagicMock()
+        resp.json = MagicMock(return_value={"data": raw})
+        with patch("httpx.AsyncClient") as mk_client:
+            mk_client.return_value.__aenter__ = AsyncMock(
+                return_value=mk_client.return_value
+            )
+            mk_client.return_value.__aexit__ = AsyncMock(return_value=False)
+            mk_client.return_value.get = AsyncMock(return_value=resp)
+            p = _provider(_cfg())
+            models = await p._list_models_impl()
+        by_id = {m.id: m for m in models}
+        assert by_id["openai/x"].pricing.input == 1.0  # 0.001 * 1000
+        assert by_id["openai/x"].pricing.output == 2.0  # 0.002 * 1000
 
     async def test_listing_filters_by_model_type(self) -> None:
         raw = [
