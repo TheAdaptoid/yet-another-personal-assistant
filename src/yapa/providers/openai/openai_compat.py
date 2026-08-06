@@ -51,6 +51,18 @@ class OpenAICompatibleProvider(InferenceProvider, ABC):
 
     _SUPPORTS_STREAM_USAGE: bool = True
 
+    _OPENAI_CHAT_PARAMS = frozenset(
+        {
+            "temperature",
+            "max_tokens",
+            "top_p",
+            "presence_penalty",
+            "frequency_penalty",
+            "stop",
+            "seed",
+        }
+    )
+
     def __init__(
         self,
         identifier: str,
@@ -233,7 +245,11 @@ class OpenAICompatibleProvider(InferenceProvider, ABC):
     ) -> dict[str, Any]:
         params = params or InferenceParams()
         formatted_messages = [self._format_message(m) for m in messages]
-        body = params.model_dump(exclude_none=True)
+        body = {
+            k: v
+            for k, v in params.model_dump(exclude_none=True).items()
+            if k in self._OPENAI_CHAT_PARAMS
+        }
         kwargs: dict[str, Any] = dict(
             model=model_id, messages=formatted_messages, stream=stream
         )

@@ -222,6 +222,22 @@ def test_set_params_sent() -> None:
     assert "top_p" not in kw
 
 
+def test_unsupported_params_omitted_from_request() -> None:
+    p = _RB()
+    kw = p._build_request_kwargs(
+        "gpt",
+        [],
+        None,
+        InferenceParams(top_k=5, min_p=0.5, repeat_penalty=1.2, temperature=0.7),
+        stream=False,
+        reasoning=None,
+    )
+    assert kw["temperature"] == 0.7
+    assert "top_k" not in kw
+    assert "min_p" not in kw
+    assert "repeat_penalty" not in kw
+
+
 def test_stream_usage_option_when_supported() -> None:
     p = _RB()
     kw = p._build_request_kwargs(
