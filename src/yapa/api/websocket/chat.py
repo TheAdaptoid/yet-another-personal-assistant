@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from collections.abc import Awaitable, Callable
 from uuid import UUID
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -67,6 +68,33 @@ async def _resolve_model(
     return None
 
 
+async def _run_stream(
+    websocket: WebSocket,
+    chat_service,
+    session_id: UUID,
+    prompt: str,
+    model: object,
+    get_approval: Callable[[ToolApprovalRequest], Awaitable[ToolApprovalResponse]],
+) -> None:
+    """Stream events from the chat service, converting raise errors to error events."""
+    try:
+        async for event in chat_service.stream(
+            session_id=session_id,
+            prompt=prompt,
+            model=model,
+            get_approval=get_approval,
+        ):
+            await websocket.send_json(event.model_dump(mode="json"))
+            if isinstance(event, (AgentDoneEvent, AgentErrorEvent)):
+                break
+    except WebSocketDisconnect:
+        raise
+    except Exception as e:
+        await websocket.send_json(
+            AgentErrorEvent(message=str(e)).model_dump(mode="json")
+        )
+
+
 async def _handle_message(
     websocket: WebSocket,
     message: dict,
@@ -87,22 +115,20 @@ async def _handle_message(
         await websocket.close(code=4008, reason="Missing 'prompt' field")
         return False
 
-    model = await _resolve_model(websocket, message, model_service, session)
+    try:
+        model = await _resolve_model(websocket, message, model_service, session)
+    except Exception as e:
+        await websocket.send_json(
+            AgentErrorEvent(message=str(e)).model_dump(mode="json")
+        )
+        return True
     if model is None:
         return False
 
     async def get_approval(request: ToolApprovalRequest) -> ToolApprovalResponse:
         return await _approval_listener(websocket, request)
 
-    async for event in chat_service.stream(
-        session_id=session_id,
-        prompt=prompt,
-        model=model,
-        get_approval=get_approval,
-    ):
-        await websocket.send_json(event.model_dump(mode="json"))
-        if isinstance(event, (AgentDoneEvent, AgentErrorEvent)):
-            break
+    await _run_stream(websocket, chat_service, session_id, prompt, model, get_approval)
     return True
 
 

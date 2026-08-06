@@ -367,6 +367,24 @@ class TestStream:
         loaded = sessions.get(str(session.id))
         assert len(loaded.messages) == 0
 
+    async def test_provider_resolution_error_yields_agent_error(
+        self, chat, sessions, models
+    ):
+        from yapa.providers import ModelsFetchError
+
+        session = sessions.create()
+        models.get_provider_by_model.side_effect = ModelsFetchError("provider down")
+        events = [
+            ev
+            async for ev in chat.stream(
+                session_id=session.id,
+                prompt="Hi",
+                model=LanguageModel(id="gpt-4", provider_id="openai"),
+            )
+        ]
+        assert isinstance(events[-1], AgentErrorEvent)
+        assert "provider down" in events[-1].message
+
     async def test_stream_is_stateless(self, chat, sessions, models):
         """Two consecutive stream calls should be independent."""
         session = sessions.create()

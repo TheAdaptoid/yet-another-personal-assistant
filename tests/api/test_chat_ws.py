@@ -141,6 +141,29 @@ def test_chat_ws_error_event(client, mock_chat_service, mock_session_service):
         assert "Something went wrong" in error["message"]
 
 
+def test_chat_ws_sends_agent_error_on_provider_exception(
+    client, mock_chat_service, mock_session_service
+):
+    from yapa.providers import ModelsFetchError
+
+    session_id = str(uuid4())
+    mock_session_service.get.return_value = Session(
+        model=LanguageModel(id="gpt-4o", provider_id="openai")
+    )
+
+    async def _stream(*args, **kwargs):
+        raise ModelsFetchError("provider down")
+        yield
+
+    mock_chat_service.stream = _stream
+
+    with client.websocket_connect(f"/api/v1/chat/{session_id}") as ws:
+        ws.send_json({"prompt": "Hi"})
+        event = ws.receive_json()
+        assert event["type"] == "agent_error"
+        assert "provider down" in event["message"]
+
+
 def test_chat_ws_missing_prompt(client, mock_session_service):
     session_id = str(uuid4())
     mock_session_service.get.return_value = Session(
