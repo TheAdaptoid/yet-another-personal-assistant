@@ -106,11 +106,11 @@ class ChatService:
 
         yield AgentStartEvent(model_id=model.full_id)
 
-        provider = self._models.get_provider_by_model(model)
-        messages, user_msg = self._build_initial_messages(session, prompt)
-        params = session.inference_params or InferenceParams()
-
         try:
+            provider = self._models.get_provider_by_model(model)
+            messages, user_msg = self._build_initial_messages(session, prompt)
+            params = session.inference_params or InferenceParams()
+
             for _ in range(self.MAX_ITERATIONS):
                 (
                     events,
@@ -314,24 +314,32 @@ class ChatService:
                         call_id=tc.id,
                     )
                 )
-                if get_approval is not None:
-                    response = await get_approval(
-                        ToolApprovalRequest(
-                            call_id=tc.id,
-                            name=tc.tool_name,
-                            arguments=tc.arguments,
+                if get_approval is None:
+                    messages.append(
+                        ToolMessage(
+                            content="Tool call denied: no approval callback provided",
+                            tool_call_id=tc.id,
+                            tool_name=tc.tool_name,
                         )
                     )
-                    if not response.approved:
-                        reason = response.reason or "No reason given"
-                        messages.append(
-                            ToolMessage(
-                                content=f"Tool call denied: {reason}",
-                                tool_call_id=tc.id,
-                                tool_name=tc.tool_name,
-                            )
+                    continue
+                response = await get_approval(
+                    ToolApprovalRequest(
+                        call_id=tc.id,
+                        name=tc.tool_name,
+                        arguments=tc.arguments,
+                    )
+                )
+                if not response.approved:
+                    reason = response.reason or "No reason given"
+                    messages.append(
+                        ToolMessage(
+                            content=f"Tool call denied: {reason}",
+                            tool_call_id=tc.id,
+                            tool_name=tc.tool_name,
                         )
-                        continue
+                    )
+                    continue
 
             try:
                 result = await tool.execute(**tc.arguments)
