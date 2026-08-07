@@ -1,5 +1,6 @@
 """Stateless chat orchestrator — agentic loop with tool execution and approval."""
 
+import asyncio
 import json
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from uuid import UUID
@@ -323,13 +324,32 @@ class ChatService:
                         )
                     )
                     continue
-                response = await get_approval(
-                    ToolApprovalRequest(
-                        call_id=tc.id,
-                        name=tc.tool_name,
-                        arguments=tc.arguments,
+                try:
+                    response = await get_approval(
+                        ToolApprovalRequest(
+                            call_id=tc.id,
+                            name=tc.tool_name,
+                            arguments=tc.arguments,
+                        )
                     )
-                )
+                except asyncio.TimeoutError:
+                    messages.append(
+                        ToolMessage(
+                            content="Error: approval timeout",
+                            tool_call_id=tc.id,
+                            tool_name=tc.tool_name,
+                        )
+                    )
+                    continue
+                except Exception as e:
+                    messages.append(
+                        ToolMessage(
+                            content=f"Tool call denied: approval failed ({e})",
+                            tool_call_id=tc.id,
+                            tool_name=tc.tool_name,
+                        )
+                    )
+                    continue
                 if not response.approved:
                     reason = response.reason or "No reason given"
                     messages.append(

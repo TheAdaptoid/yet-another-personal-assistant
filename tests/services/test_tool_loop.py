@@ -1,5 +1,6 @@
 """Tests for ChatService agentic loop."""
 
+import asyncio
 from unittest.mock import MagicMock
 
 import pytest
@@ -335,6 +336,110 @@ class TestToolLoop:
         ]
         assert len(tool_msgs) == 1
         assert "denied" in (tool_msgs[0].content or "")
+        assert not any(isinstance(e, ToolResultEvent) for e in events)
+
+    async def test_approval_callback_timeout_fed_back_as_denial(
+        self,
+        chat,
+        sessions,
+        models,
+    ):
+        """Approval API callback raising TimeoutError feeds back denial, loop continues."""
+        session = sessions.create()
+        provider = models.get_provider_by_model.return_value
+        chat._tools = ToolRegistry(
+            [ToolThatReturns(name="dangerous", needs_approval=True)]
+        )
+
+        call_count = 0
+        seen_messages = []
+
+        async def _stream(model, messages, tools=None, params=None, reasoning=None):
+            nonlocal call_count
+            call_count += 1
+            seen_messages.append(messages)
+            if call_count == 1:
+                yield ToolCallDeltaEvent(
+                    index=0, id="call_1", name="dangerous", arguments="{}"
+                )
+                yield StreamEndEvent(finish_reason="tool_calls")
+            else:
+                yield ContentDelta(content="Ok")
+                yield StreamEndEvent(finish_reason="stop")
+
+        provider.stream_chat.side_effect = _stream
+
+        async def get_approval(req):
+            raise asyncio.TimeoutError
+
+        events = []
+        async for e in chat.stream(
+            session_id=session.id, prompt="Hi", model=model, get_approval=get_approval
+        ):
+            events.append(e)
+
+        assert isinstance(events[-1], AgentDoneEvent)
+        assert provider.stream_chat.call_count == 2
+        tool_msgs = [
+            m
+            for chunk in seen_messages[1:]
+            for m in chunk
+            if isinstance(m, ToolMessage)
+        ]
+        assert len(tool_msgs) == 1
+        assert "approval" in (tool_msgs[0].content or "")
+        assert not any(isinstance(e, ToolResultEvent) for e in events)
+
+    async def test_approval_callback_error_fed_back_as_denial(
+        self,
+        chat,
+        sessions,
+        models,
+    ):
+        """Approval callback raising Exception feeds back denial, loop continues."""
+        session = sessions.create()
+        provider = models.get_provider_by_model.return_value
+        chat._tools = ToolRegistry(
+            [ToolThatReturns(name="dangerous", needs_approval=True)]
+        )
+
+        call_count = 0
+        seen_messages = []
+
+        async def _stream(model, messages, tools=None, params=None, reasoning=None):
+            nonlocal call_count
+            call_count += 1
+            seen_messages.append(messages)
+            if call_count == 1:
+                yield ToolCallDeltaEvent(
+                    index=0, id="call_1", name="dangerous", arguments="{}"
+                )
+                yield StreamEndEvent(finish_reason="tool_calls")
+            else:
+                yield ContentDelta(content="Ok")
+                yield StreamEndEvent(finish_reason="stop")
+
+        provider.stream_chat.side_effect = _stream
+
+        async def get_approval(req):
+            raise RuntimeError("client disconnected")
+
+        events = []
+        async for e in chat.stream(
+            session_id=session.id, prompt="Hi", model=model, get_approval=get_approval
+        ):
+            events.append(e)
+
+        assert isinstance(events[-1], AgentDoneEvent)
+        assert provider.stream_chat.call_count == 2
+        tool_msgs = [
+            m
+            for chunk in seen_messages[1:]
+            for m in chunk
+            if isinstance(m, ToolMessage)
+        ]
+        assert len(tool_msgs) == 1
+        assert "approval" in (tool_msgs[0].content or "")
         assert not any(isinstance(e, ToolResultEvent) for e in events)
 
     async def test_unknown_tool(self, chat, sessions, models):
