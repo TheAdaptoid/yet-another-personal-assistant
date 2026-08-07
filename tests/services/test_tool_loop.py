@@ -345,7 +345,7 @@ class TestToolLoop:
         sessions,
         models,
     ):
-        """Approval API callback raising TimeoutError feeds back denial, loop continues."""
+        """Approval callback raising TimeoutError feeds back denial, loop continues."""
         session = sessions.create()
         provider = models.get_provider_by_model.return_value
         chat._tools = ToolRegistry(
