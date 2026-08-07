@@ -293,6 +293,22 @@ def test_unknown_model_yields_default_metadata() -> None:
     assert m.pricing is None
 
 
+def test_format_preserves_explicit_falsy_values_over_metadata() -> None:
+    p = _openai_provider()
+    m = p._format_model(
+        "gpt-5.6",
+        name="",
+        description="",
+        context_length=0,
+        max_output=0,
+    )
+    assert type(m) is LanguageModel
+    assert m.name == ""
+    assert m.description == ""
+    assert m.context_length == 0
+    assert m.max_output == 0
+
+
 def _make_api_status_error(
     status_code: int,
     message: str = "API error",

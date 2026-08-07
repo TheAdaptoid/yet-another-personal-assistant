@@ -139,17 +139,27 @@ class OpenAIIP(OpenAICompatibleProvider):
 
         return base.model_copy(
             update={
-                "name": cast(str | None, name or meta.get("name") or base.name),
+                "name": cast(
+                    str | None,
+                    name if name is not None else meta.get("name", base.name),
+                ),
                 "description": cast(
                     str | None,
-                    description or meta.get("description") or base.description,
+                    description
+                    if description is not None
+                    else meta.get("description", base.description),
                 ),
                 "context_length": cast(
                     int | None,
-                    context_length or meta.get("context_length") or base.context_length,
+                    context_length
+                    if context_length is not None
+                    else meta.get("context_length", base.context_length),
                 ),
                 "max_output": cast(
-                    int | None, max_output or meta.get("max_output") or base.max_output
+                    int | None,
+                    max_output
+                    if max_output is not None
+                    else meta.get("max_output", base.max_output),
                 ),
                 "supports_tools": bool(
                     supports_tools
@@ -167,7 +177,10 @@ class OpenAIIP(OpenAICompatibleProvider):
                     else meta.get("supports_reasoning", base.supports_reasoning)
                 ),
                 "pricing": cast(
-                    ModelPricing | None, pricing or meta.get("pricing") or base.pricing
+                    ModelPricing | None,
+                    pricing
+                    if pricing is not None
+                    else meta.get("pricing", base.pricing),
                 ),
             }
         )
