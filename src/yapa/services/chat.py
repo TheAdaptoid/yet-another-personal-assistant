@@ -110,6 +110,7 @@ class ChatService:
         try:
             provider = self._models.get_provider_by_model(model)
             messages, user_msg = self._build_initial_messages(session, prompt)
+            start = len(messages)
             params = session.inference_params or InferenceParams()
 
             for _ in range(self.MAX_ITERATIONS):
@@ -157,6 +158,9 @@ class ChatService:
                 for event in tool_events:
                     yield event
 
+            self._sessions.add_messages(
+                str(session_id), [user_msg] + messages[start:], model=model
+            )
             yield AgentErrorEvent(message="Max iterations reached")
 
         except Exception as e:

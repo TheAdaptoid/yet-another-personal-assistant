@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from yapa.models import (
+    AssistantMessage,
     LanguageModel,
     TokenUsage,
     ToolMessage,
@@ -517,6 +518,37 @@ class TestToolLoop:
         assert isinstance(events[-1], AgentErrorEvent)
         assert "max iterations" in events[-1].message.lower()
         assert provider.stream_chat.call_count == ChatService.MAX_ITERATIONS
+
+    async def test_max_iterations_persists_in_flight_turn(self, chat, sessions, models):
+        """In-flight turn is persisted when MAX_ITERATIONS is reached."""
+        session = sessions.create()
+        provider = models.get_provider_by_model.return_value
+
+        async def _stream(model, messages, tools=None, params=None, reasoning=None):
+            yield ToolCallDeltaEvent(
+                index=0, id="call_1", name="echo", arguments='{"input": "x"}'
+            )
+            yield StreamEndEvent(finish_reason="tool_calls")
+
+        provider.stream_chat.side_effect = _stream
+
+        events = []
+        async for e in chat.stream(session_id=session.id, prompt="Hi", model=model):
+            events.append(e)
+
+        assert isinstance(events[-1], AgentErrorEvent)
+        assert "max iterations" in events[-1].message.lower()
+        assert provider.stream_chat.call_count == ChatService.MAX_ITERATIONS
+
+        loaded = sessions.get(str(session.id))
+        user_msgs = [m for m in loaded.messages if isinstance(m, UserMessage)]
+        assert len(user_msgs) == 1
+        assert user_msgs[0].content == "Hi"
+        tool_msgs = [m for m in loaded.messages if isinstance(m, ToolMessage)]
+        assert len(tool_msgs) >= 1
+        assistant_msgs = [m for m in loaded.messages if isinstance(m, AssistantMessage)]
+        assert len(assistant_msgs) == ChatService.MAX_ITERATIONS
+        assert loaded.model is not None
 
     async def test_persists_messages_only_once(self, chat, sessions, models):
         """Messages are persisted only when the loop terminates, not per iteration."""
