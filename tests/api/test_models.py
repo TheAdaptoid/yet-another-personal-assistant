@@ -100,6 +100,19 @@ def test_get_model_by_full_id(client, sample_models):
     assert response.json()["id"] == "gpt-4o"
 
 
+def test_get_model_with_colon_in_model_id(client):
+    model = ModelData(
+        id="llama3.2:8b", provider_id="ollama", type=ModelType.LLM
+    )
+    client.app.state.model_service.get_model = AsyncMock(return_value=model)
+    response = client.get("/api/v1/models/ollama:llama3.2:8b")
+    assert response.status_code == 200
+    assert response.json()["id"] == "llama3.2:8b"
+    client.app.state.model_service.get_model.assert_awaited_once_with(
+        "ollama:llama3.2:8b"
+    )
+
+
 def test_get_model_not_found(client):
     client.app.state.model_service.get_model = AsyncMock(
         side_effect=ValueError("Failed to fetch model 'openai:ghost'")

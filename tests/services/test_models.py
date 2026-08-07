@@ -142,6 +142,13 @@ class TestGetModel:
         with pytest.raises(ValueError, match="expected 'provider_id:model_id'"):
             await svc.get_model("no-colon")
 
+    async def test_preserves_colons_in_model_id(self, svc):
+        result = await svc.get_model("prov_a:gpt-4:v1")
+        provider = svc._registry.get.return_value
+        provider.get_model.assert_awaited_once_with(model_id="gpt-4:v1")
+        svc._registry.get.assert_called_once_with("prov_a")
+        assert result.id == "gpt-4"
+
     async def test_raises_value_error_on_unknown_provider(self):
         registry = MagicMock()
         registry.get.side_effect = ProviderNotAvailableError("not found")
