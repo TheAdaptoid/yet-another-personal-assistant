@@ -76,12 +76,12 @@ class TestSave:
         loaded = store.load(session.id)
         assert loaded.title == "updated"
 
-    def test_save_invalid_path_raises_storage_write_error(self, store):
-        """Should raise StorageWriteError when write fails."""
+    def test_save_replace_error_raises_storage_write_error(self, store):
+        """Should raise StorageWriteError when replacement fails."""
         session = Session(title="fail")
         with pytest.raises(StorageWriteError):
             patch = unittest.mock.patch(
-                "pathlib.Path.rename", side_effect=OSError("read-only")
+                "pathlib.Path.replace", side_effect=OSError("read-only")
             )
             with patch:
                 store.save(session)

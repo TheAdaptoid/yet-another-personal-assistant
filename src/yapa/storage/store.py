@@ -56,7 +56,7 @@ class GenericStore(Generic[TE]):
             tmp_file_path.write_text(
                 json.dumps(entity.model_dump(mode="json")), encoding="utf-8"
             )
-            tmp_file_path.rename(file_path)
+            tmp_file_path.replace(file_path)
         except Exception as e:
             err_msg = f"Failed to save entity: {e}"
             logger.error(err_msg)
