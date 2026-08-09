@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from yapa.logging import configure_logging
 from yapa.providers import ProviderNotAvailableError
 from yapa.services import ChatService, ModelService, SessionService
 from yapa.services.config import Config, JsonConfigStore
@@ -45,6 +46,8 @@ def create_app(config: Config | None = None) -> FastAPI:
     """Create a configured FastAPI application."""
     if config is None:
         config = JsonConfigStore().load()
+    else:
+        configure_logging(config.log_level)
 
     app = FastAPI(title="YAPA", lifespan=_lifespan)
     app.state.config = config
