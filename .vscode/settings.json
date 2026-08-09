@@ -6,7 +6,4 @@
     "python.testing.unittestEnabled": false,
     "python.testing.pytestEnabled": true,
     "ty.diagnosticMode": "workspace",
-    "chat.tools.terminal.autoApprove": {
-        "uv": true
-    },
 }
