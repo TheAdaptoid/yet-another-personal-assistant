@@ -204,6 +204,18 @@ class OpenAICompatibleProvider(InferenceProvider, ABC):
         ] = await self._client.chat.completions.create(**kwargs)
 
         async for chunk in response_stream:
+            usage: TokenUsage | None = None
+            if chunk.usage is not None:
+                usage = TokenUsage(
+                    prompt_tokens=chunk.usage.prompt_tokens,
+                    completion_tokens=chunk.usage.completion_tokens,
+                    total_tokens=chunk.usage.total_tokens,
+                )
+
+            if not chunk.choices:
+                yield StreamDelta(usage=usage)
+                continue
+
             delta = chunk.choices[0].delta
             content = delta.content
             reasoning_content = self._extract_reasoning_content(delta)
@@ -221,14 +233,6 @@ class OpenAICompatibleProvider(InferenceProvider, ABC):
                     )
 
             finish_reason: str | None = chunk.choices[0].finish_reason
-
-            usage: TokenUsage | None = None
-            if chunk.usage is not None:
-                usage = TokenUsage(
-                    prompt_tokens=chunk.usage.prompt_tokens,
-                    completion_tokens=chunk.usage.completion_tokens,
-                    total_tokens=chunk.usage.total_tokens,
-                )
 
             yield StreamDelta(
                 content=content,

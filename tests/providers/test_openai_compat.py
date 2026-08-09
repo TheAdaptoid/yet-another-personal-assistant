@@ -11,6 +11,7 @@ from yapa.models import (
     InferenceParams,
     ModelType,
     StreamDelta,
+    TokenUsage,
     ToolCall,
     ToolCallDelta,
     ToolMessage,
@@ -422,6 +423,31 @@ class TestStreamChatImpl:
         assert results[0].usage is not None
         assert results[0].usage.prompt_tokens == 10
         assert results[0].usage.total_tokens == 30
+
+    async def test_yields_usage_only_chunk_without_choices(
+        self, compat_provider
+    ) -> None:
+        usage = SimpleNamespace(
+            prompt_tokens=10, completion_tokens=20, total_tokens=30
+        )
+        stream = _stream(SimpleNamespace(choices=[], usage=usage))
+        mock_create = AsyncMock(return_value=stream)
+        compat_provider._client.chat.completions.create = mock_create
+
+        results: list[StreamDelta] = []
+        async for delta in compat_provider._stream_chat_impl(
+            model_id="gpt-4",
+            messages=[UserMessage(content="hi")],
+        ):
+            results.append(delta)
+
+        assert results == [
+            StreamDelta(
+                usage=TokenUsage(
+                    prompt_tokens=10, completion_tokens=20, total_tokens=30
+                )
+            )
+        ]
 
     async def test_no_metadata_when_not_in_response(self, compat_provider) -> None:
         stream = _stream(_chunk(content="ok", reasoning_content=None))
