@@ -5,6 +5,18 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 _loggers: dict[str, logging.Logger] = {}
+_configured_level = "INFO"
+
+
+def configure_logging(level: str) -> None:
+    """Set the default level and update loggers that already exist."""
+    global _configured_level
+    _configured_level = level
+
+    for logger in _loggers.values():
+        logger.setLevel(level)
+        for handler in logger.handlers:
+            handler.setLevel(level)
 
 
 def get_logger(
@@ -32,7 +44,7 @@ def get_logger(
     if name in _loggers:
         return _loggers[name]
 
-    log_level = level or "INFO"
+    log_level = level or _configured_level
 
     logger = logging.getLogger(name)
     logger.setLevel(log_level)

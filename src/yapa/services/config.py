@@ -9,6 +9,8 @@ from typing import Any, Protocol, runtime_checkable
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
+from yapa.logging import configure_logging
+
 DEFAULT_DATA_DIR = Path.home() / ".yapa"
 DEFAULT_CONFIG_PATH = DEFAULT_DATA_DIR / "config.json"
 DEFAULT_STORAGE_DIR = DEFAULT_DATA_DIR / "storage"
@@ -84,6 +86,7 @@ class JsonConfigStore:
                     config_data[key] = value
 
         self._cache = Config(**config_data)
+        configure_logging(self._cache.log_level)
         return self._cache
 
     def save(self, config: Config) -> None:
