@@ -170,6 +170,18 @@ def test_patch_system_prompt_clear(client, mock_session_service):
     )
 
 
+def test_patch_system_prompt_rejects_omitted_field(client, mock_session_service):
+    session_id = uuid4()
+
+    response = client.patch(
+        f"/api/v1/sessions/{session_id}/system-prompt",
+        json={},
+    )
+
+    assert response.status_code == 422
+    mock_session_service.update_system_prompt.assert_not_called()
+
+
 def test_patch_inference_params(client, mock_session_service):
     session = _make_session(
         title="Test",
@@ -180,7 +192,7 @@ def test_patch_inference_params(client, mock_session_service):
 
     response = client.patch(
         f"/api/v1/sessions/{session_id}/inference-params",
-        json={"temperature": 0.7},
+        json={"inference_params": {"temperature": 0.7}},
     )
     assert response.status_code == 200
     data = response.json()
@@ -198,7 +210,7 @@ def test_patch_inference_params_clear(client, mock_session_service):
 
     response = client.patch(
         f"/api/v1/sessions/{session_id}/inference-params",
-        json={},
+        json={"inference_params": None},
     )
     assert response.status_code == 200
     data = response.json()
@@ -206,7 +218,30 @@ def test_patch_inference_params_clear(client, mock_session_service):
     mock_session_service.update_inference_params.assert_called_once()
     args, _ = mock_session_service.update_inference_params.call_args
     assert args[0] == str(session_id)
-    assert args[1] is not None
-    assert args[1].temperature is None
-    assert args[1].max_tokens is None
-    assert args[1].top_p is None
+    assert args[1] is None
+
+
+def test_patch_inference_params_rejects_omitted_field(client, mock_session_service):
+    session_id = uuid4()
+
+    response = client.patch(
+        f"/api/v1/sessions/{session_id}/inference-params",
+        json={},
+    )
+
+    assert response.status_code == 422
+    mock_session_service.update_inference_params.assert_not_called()
+
+
+def test_patch_inference_params_rejects_malformed_nested_value(
+    client, mock_session_service
+):
+    session_id = uuid4()
+
+    response = client.patch(
+        f"/api/v1/sessions/{session_id}/inference-params",
+        json={"inference_params": {"temperature": "hot"}},
+    )
+
+    assert response.status_code == 422
+    mock_session_service.update_inference_params.assert_not_called()
