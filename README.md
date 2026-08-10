@@ -126,10 +126,17 @@ The server provides:
 - `GET /api/v1/sessions/{id}` — get a session
 - `PATCH /api/v1/sessions/{id}` — rename a session
 - `DELETE /api/v1/sessions/{id}` — delete a session
-- `PATCH /api/v1/sessions/{id}/system-prompt` — update system prompt
-- `PATCH /api/v1/sessions/{id}/inference-params` — update inference
-  params
+- `PATCH /api/v1/sessions/{id}/system-prompt` — set or clear the system
+  prompt with `{"system_prompt": "Be concise."}` or
+  `{"system_prompt": null}`
+- `PATCH /api/v1/sessions/{id}/inference-params` — set or clear inference
+  params with `{"inference_params": {"temperature": 0.7}}` or
+  `{"inference_params": null}`
 - `WS /api/v1/chat/{session_id}` — streaming chat over WebSocket
+
+For the two PATCH endpoints above, the wrapper field is required. Omitting it
+(including sending `{}`) returns `422`. Use JSON `null` as the explicit clear
+operation.
 
 ## Quality checks
 
