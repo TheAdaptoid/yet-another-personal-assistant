@@ -163,5 +163,6 @@ and conventions.
 5. Open a pull request targeting `development`. Changes are batched into `development` and merged into `master` on release.
 
 The CI runs lint and test workflows on every push and pull request to
-`master`. The release workflow builds and drafts a GitHub
-release when you push a tag matching `v*`.
+`master`. The remote CI also runs the test suite on Windows and Ubuntu to
+catch platform-specific regressions. The release workflow builds and drafts a
+GitHub release when you push a tag matching `v*`.
