@@ -3,6 +3,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from pydantic import BaseModel
 
 from yapa.models import InferenceParams, Session
 from yapa.services import SessionService
@@ -13,6 +14,18 @@ router = APIRouter(tags=["sessions"])
 
 MAX_PER_PAGE = 100
 DEFAULT_PER_PAGE = 20
+
+
+class SystemPromptPatch(BaseModel):
+    """Request body for setting or clearing a session system prompt."""
+
+    system_prompt: str | None
+
+
+class InferenceParamsPatch(BaseModel):
+    """Request body for setting or clearing session inference parameters."""
+
+    inference_params: InferenceParams | None
 
 
 @router.get("/sessions", response_model=list[Session])
@@ -76,20 +89,20 @@ async def delete_session(
 @router.patch("/sessions/{session_id}/system-prompt", response_model=Session)
 async def patch_system_prompt(
     session_id: UUID,
-    body: dict,
+    body: SystemPromptPatch,
     session_service: SessionService = Depends(get_session_service),
 ):
     """Set or clear the system prompt for a session."""
-    prompt = body.get("system_prompt")
-    return session_service.update_system_prompt(str(session_id), prompt)
+    return session_service.update_system_prompt(str(session_id), body.system_prompt)
 
 
 @router.patch("/sessions/{session_id}/inference-params", response_model=Session)
 async def patch_inference_params(
     session_id: UUID,
-    body: dict,
+    body: InferenceParamsPatch,
     session_service: SessionService = Depends(get_session_service),
 ):
     """Set or clear the inference params for a session."""
-    params = InferenceParams(**body) if body is not None else None
-    return session_service.update_inference_params(str(session_id), params)
+    return session_service.update_inference_params(
+        str(session_id), body.inference_params
+    )
